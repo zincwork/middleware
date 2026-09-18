@@ -1,0 +1,221 @@
+import {
+  CheckCircleOutlineRounded,
+  GroupsOutlined,
+  KeyboardArrowDownRounded,
+  RadioButtonUncheckedRounded
+} from '@mui/icons-material';
+import { Box, Divider, MenuItem, Popover, alpha, useTheme } from '@mui/material';
+import pluralize from 'pluralize';
+import { FC, useCallback, useEffect, useRef } from 'react';
+
+import { FlexBox } from '@/components/FlexBox';
+import { HeaderBtn } from '@/components/HeaderBtn';
+import { LightTooltip } from '@/components/Shared';
+import { Line } from '@/components/Text';
+import { useBoolState, useEasyState } from '@/hooks/useEasyState';
+import { appSlice } from '@/slices/app';
+import { useDispatch, useSelector } from '@/store';
+import { depFn } from '@/utils/fn';
+
+/** Must match ALL_GITHUB_TEAMS in src/utils/githubTeams.ts */
+export const ALL_GITHUB_TEAMS = 'ALL';
+
+type GithubTeamOption = {
+  slug: string;
+  name: string;
+  member_count: number;
+};
+
+/**
+ * Filters DORA metrics to pull requests authored by the members of a GitHub
+ * team. Sits next to the existing Teams and Branch selectors.
+ *
+ * The existing "Teams" dropdown selects a Middleware team, which is a group of
+ * *repositories*. This one selects a group of *people*. They are independent
+ * axes: "All Zinc repos, Skipper people" is the useful combination when teams
+ * share a codebase.
+ */
+export const GithubTeamSelector: FC = () => {
+  const theme = useTheme();
+  const elRef = useRef(null);
+  const open = useBoolState(false);
+  const dispatch = useDispatch();
+
+  const teams = useEasyState<GithubTeamOption[]>([]);
+  const selectedSlug = useSelector((state) => state.app.githubTeamSlug);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/resources/github_teams')
+      .then((r) => (r.ok ? r.json() : { teams: [] }))
+      .then((data) => {
+        if (!cancelled) depFn(teams.set, data?.teams || []);
+      })
+      .catch(() => {
+        if (!cancelled) depFn(teams.set, []);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const select = useCallback(
+    (slug: string) => {
+      dispatch(appSlice.actions.setGithubTeam(slug));
+      depFn(open.false);
+    },
+    [dispatch, open.false]
+  );
+
+  const selected = teams.value.find((t) => t.slug === selectedSlug);
+  const label = selected ? selected.name : 'All contributors';
+
+  // With no config in place there is nothing to choose between, so stay out of
+  // the way rather than showing an empty dropdown.
+  if (!teams.value.length) return null;
+
+  return (
+    <>
+      <LightTooltip
+        title={
+          selected
+            ? `Showing work authored by the ${selected.member_count} member(s) of ${selected.name}`
+            : 'Showing work by everyone who contributed to the selected repos'
+        }
+      >
+        <Box>
+          <HeaderBtn
+            ref={elRef}
+            startIcon={<GroupsOutlined sx={{ fontSize: '18px' }} />}
+            endIcon={<KeyboardArrowDownRounded />}
+            onClick={open.true}
+            sx={{
+              minWidth: '200px',
+              '> .MuiButton-endIcon': { marginLeft: 'auto' }
+            }}
+          >
+            <FlexBox col alignStart>
+              <Line tiny secondary>
+                GitHub Team
+              </Line>
+              <Line>{label}</Line>
+            </FlexBox>
+          </HeaderBtn>
+        </Box>
+      </LightTooltip>
+
+      <Popover
+        open={open.value}
+        anchorEl={elRef.current}
+        onClose={open.false}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      >
+        <Box minWidth="280px" py={1}>
+          <Box px={2} pb={1}>
+            <Line tiny secondary>
+              Filter by the people in a GitHub team
+            </Line>
+          </Box>
+          <Divider />
+
+          <MenuItem
+            selected={!selectedSlug || selectedSlug === ALL_GITHUB_TEAMS}
+            onClick={() => select(ALL_GITHUB_TEAMS)}
+          >
+            <FlexBox alignCenter gap1>
+              {!selectedSlug || selectedSlug === ALL_GITHUB_TEAMS ? (
+                <CheckCircleOutlineRounded
+                  sx={{ fontSize: '18px', color: theme.colors.success.main }}
+                />
+              ) : (
+                <RadioButtonUncheckedRounded sx={{ fontSize: '18px' }} />
+              )}
+              <Line>All contributors</Line>
+            </FlexBox>
+          </MenuItem>
+
+          <Divider />
+
+          {teams.value.map((team) => {
+            const isSelected = team.slug === selectedSlug;
+            return (
+              <MenuItem
+                key={team.slug}
+                selected={isSelected}
+                disabled={!team.member_count}
+                onClick={() => select(team.slug)}
+              >
+                <FlexBox alignCenter gap1 fullWidth>
+                  {isSelected ? (
+                    <CheckCircleOutlineRounded
+                      sx={{
+                        fontSize: '18px',
+                        color: theme.colors.success.main
+                      }}
+                    />
+                  ) : (
+                    <RadioButtonUncheckedRounded sx={{ fontSize: '18px' }} />
+                  )}
+                  <Line>{team.name}</Line>
+                  <Line tiny secondary ml="auto">
+                    {team.member_count
+                      ? pluralize('member', team.member_count, true)
+                      : 'no members'}
+                  </Line>
+                </FlexBox>
+              </MenuItem>
+            );
+          })}
+        </Box>
+      </Popover>
+    </>
+  );
+};
+
+/**
+ * Shown above the metric cards whenever an author filter is active.
+ *
+ * This exists because the filter does not apply evenly across the four DORA
+ * metrics, and side-by-side tiles that look equally authoritative but mean
+ * different things are worse than no filter at all:
+ *
+ *  - Lead time: filtered. Every PR query funnels through PRFilter.
+ *  - Deployment frequency: filtered for repos set to PR_MERGE, because those
+ *    deployments are derived from pull requests. Repos set to WORKFLOW take
+ *    their deployments from CI runs, which this filter does not touch.
+ *  - Change failure rate and MTTR: filtered only where incidents are derived
+ *    from pull requests. Incidents from a provider such as PagerDuty carry
+ *    their own actor fields and are unaffected.
+ */
+export const GithubTeamFilterNotice: FC = () => {
+  const theme = useTheme();
+  const selectedSlug = useSelector((state) => state.app.githubTeamSlug);
+
+  if (!selectedSlug || selectedSlug === ALL_GITHUB_TEAMS) return null;
+
+  return (
+    <FlexBox
+      alignCenter
+      gap1
+      px={2}
+      py={1}
+      borderRadius={1}
+      bgcolor={alpha(theme.colors.info.main, 0.1)}
+      border={`1px solid ${alpha(theme.colors.info.main, 0.3)}`}
+    >
+      <GroupsOutlined sx={{ fontSize: '18px', color: theme.colors.info.main }} />
+      <Line tiny>
+        Filtered to <b>{selectedSlug}</b>. Lead time reflects the filter
+        directly. Deployment frequency counts production deploys that carried
+        at least one of the team&apos;s pull requests, so a deploy carrying
+        nothing attributable counts for nobody and a deploy carrying several
+        teams&apos; work counts for each — team figures will not sum to the
+        org-wide number in either direction. Change failure rate and mean time
+        to recovery only reflect the filter where incidents are derived from
+        pull requests; treat them as org-wide otherwise.
+      </Line>
+    </FlexBox>
+  );
+};

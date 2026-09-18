@@ -4,10 +4,6 @@ from enum import Enum
 class UserIdentityProvider(Enum):
     GITHUB = "github"
     GITLAB = "gitlab"
-    # CircleCI is a CI provider rather than a code host, but its token lives in
-    # the same Integration table keyed on name, and get_access_token queries
-    # Integration.name == provider.value.
-    CIRCLECI = "circle_ci"
 
     @classmethod
     def get_enum(self, provider: str):

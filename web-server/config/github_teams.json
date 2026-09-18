@@ -1,0 +1,224 @@
+{
+  "org": "zincwork",
+  "generated_at": "2026-09-04T14:28:52.455969+00:00",
+  "source": "/Users/alisdairlittle/Claude/Projects/Coding Advice/option-a/zinc_teams.json",
+  "teams": [
+    {
+      "slug": "bliss",
+      "name": "Bliss",
+      "members": [
+        "RobJLeonard",
+        "abbiehowell-zinc",
+        "joedavies25",
+        "lucilasanjurjo-zinc",
+        "mohamed-zinc",
+        "rhodger",
+        "tinapan-zinc"
+      ],
+      "branch_prefixes": [
+        "gold",
+        "bliss"
+      ]
+    },
+    {
+      "slug": "core-platform-collaborators",
+      "name": "Core Platform Collaborators",
+      "members": [
+        "bianka-nedjalkova"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "design",
+      "name": "Design",
+      "members": [
+        "helloitshanyi",
+        "joezincwork",
+        "oliverjones-ui",
+        "tom-moore-design"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "developers",
+      "name": "Developers",
+      "members": [
+        "RobJLeonard",
+        "abbiehowell-zinc",
+        "ak-30",
+        "alisdairlittle",
+        "ckpanteli",
+        "emily-dy-yoon",
+        "hugo-zinc",
+        "jackcleary01",
+        "joedavies25",
+        "khomch",
+        "lucilasanjurjo-zinc",
+        "lukeross",
+        "mohamed-zinc",
+        "muhammadali96",
+        "primlaothamatas",
+        "rhodger",
+        "sanjeevvp",
+        "tinapan-zinc",
+        "vshleifman",
+        "zincsfoley"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "engineering",
+      "name": "Engineering",
+      "members": [
+        "RobJLeonard",
+        "Zn0Kelvin",
+        "abbiehowell-zinc",
+        "ak-30",
+        "alisdairlittle",
+        "ckpanteli",
+        "elenaharan",
+        "emily-dy-yoon",
+        "fathiyaabdalla",
+        "hugo-zinc",
+        "iliasu-zinc",
+        "jackcleary01",
+        "joedavies25",
+        "khomch",
+        "lucilasanjurjo-zinc",
+        "lukeross",
+        "matthew-wagerfield-zinc",
+        "mohamed-zinc",
+        "muhammadali96",
+        "neilbrooks-cyber",
+        "primlaothamatas",
+        "rhodger",
+        "sanjeevvp",
+        "shervinm95",
+        "tinapan-zinc",
+        "vshleifman",
+        "zinc-deployment",
+        "zincsfoley"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "gsd-read-only",
+      "name": "GSD Read-Only",
+      "members": [
+        "RobJLeonard",
+        "iliasu-zinc",
+        "pahwzinc",
+        "sanjeevvp"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "gsd-tech",
+      "name": "GSD Tech",
+      "members": [
+        "gsdrob",
+        "sanjeevvp",
+        "sanjeevvp-gsd"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "operations",
+      "name": "Operations",
+      "members": [
+        "Callumtheo",
+        "Samrcnorman",
+        "dancourse-zincwork",
+        "fathiyaabdalla",
+        "iliasu-zinc",
+        "jaredd-zinc",
+        "joelblackburn-ui",
+        "kirtyadarsh-hue",
+        "lexfaraimo-boop",
+        "minatopaloglu",
+        "natbuxton",
+        "owais-zinc",
+        "zhen-lim"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "operations-admin",
+      "name": "Operations-Admin",
+      "members": [
+        "dancourse-zincwork",
+        "iliasu-zinc"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "product",
+      "name": "Product",
+      "members": [
+        "GabiZinc",
+        "Shippable-ls",
+        "kasiapoza-bot",
+        "oliverjones-ui",
+        "rikkivanberkel-cloud"
+      ],
+      "branch_prefixes": []
+    },
+    {
+      "slug": "red-team",
+      "name": "Red Team",
+      "members": [
+        "RobJLeonard",
+        "hugo-zinc",
+        "khomch",
+        "lukeross",
+        "vshleifman"
+      ],
+      "branch_prefixes": [
+        "red",
+        "red-team"
+      ]
+    },
+    {
+      "slug": "scallops",
+      "name": "Scallops",
+      "members": [
+        "RobJLeonard",
+        "ckpanteli",
+        "muhammadali96",
+        "primlaothamatas"
+      ],
+      "branch_prefixes": [
+        "green",
+        "scallops"
+      ]
+    },
+    {
+      "slug": "skipper",
+      "name": "Skipper",
+      "members": [
+        "RobJLeonard",
+        "ak-30",
+        "alisdairlittle",
+        "emily-dy-yoon",
+        "jackcleary01",
+        "zincsfoley"
+      ],
+      "branch_prefixes": [
+        "blue",
+        "skipper"
+      ]
+    },
+    {
+      "slug": "tech-ops",
+      "name": "Tech ops",
+      "members": [
+        "elenaharan",
+        "iliasu-zinc",
+        "sanjeevvp",
+        "shervinm95",
+        "zinc-deployment"
+      ],
+      "branch_prefixes": []
+    }
+  ]
+}

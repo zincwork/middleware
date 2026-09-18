@@ -18,7 +18,6 @@ import { AvatarPageTitle } from './AvatarPageTitle';
 import { BranchSelector } from './BranchSelector';
 import { FlexBox, FlexBoxProps } from './FlexBox';
 import { GithubButton } from './GithubButton';
-import { GithubTeamSelector } from './GithubTeamSelector';
 import { Hotkey } from './Hotkey';
 import { Logo } from './Logo/Logo';
 import { Tabs } from './Tabs';
@@ -112,7 +111,6 @@ export const PageHeader: FC<
                 <TeamSelector mode={teamDateSelectorMode} />
               )}
               {selectBranch && <BranchSelector />}
-              {teamDateSelectorMode && <GithubTeamSelector />}
               {additionalFilters?.map((filter, i) => (
                 <Fragment key={i}>{filter}</Fragment>
               ))}

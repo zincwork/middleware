@@ -57,8 +57,6 @@ type State = StateFetchConfig<{
   latestImageStatus: ImageStatusApiResponse | null;
   selectedIndustry: Industries;
   githubRepoStarsCount: number | null;
-  /** GitHub team slug to scope metrics by PR author, or null for everyone */
-  githubTeamSlug: string | null;
 }>;
 
 export const DEFAULT_PR_TABLE_COLUMN_STATE_MAP = {
@@ -100,10 +98,7 @@ const initialState: State = {
   lastDisabledImageUpdateBannerAt: null,
   latestImageStatus: null,
   selectedIndustry: Industries.ALL_INDUSTRIES,
-  githubRepoStarsCount: null,
-  // This slice is persisted to localStorage, so an explicit default matters
-  // for anyone upgrading with a store already in their browser.
-  githubTeamSlug: null
+  githubRepoStarsCount: null
 };
 
 export const appSlice = createSlice({
@@ -119,9 +114,6 @@ export const appSlice = createSlice({
     setSingleTeam(state: State, action: PayloadAction<Team[] | undefined>) {
       const teams = action.payload.filter((team) => !team?.is_deleted);
       state.singleTeam = teams;
-    },
-    setGithubTeam(state: State, action: PayloadAction<string | null>) {
-      state.githubTeamSlug = action.payload === 'ALL' ? null : action.payload;
     },
     setTeamProdBranchMap(
       state: State,

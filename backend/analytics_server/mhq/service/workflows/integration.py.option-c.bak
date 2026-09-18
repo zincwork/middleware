@@ -6,7 +6,6 @@ from mhq.store.repos.core import CoreRepoService
 
 WORKFLOW_INTEGRATION_BUCKET = [
     RepoWorkflowProviders.GITHUB_ACTIONS.value,
-    RepoWorkflowProviders.CIRCLE_CI.value,
 ]
 
 

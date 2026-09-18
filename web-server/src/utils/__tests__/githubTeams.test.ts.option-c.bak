@@ -1,0 +1,101 @@
+import {
+  ALL_GITHUB_TEAMS,
+  applyAuthors,
+  parseGithubTeamsConfig,
+  resolveAuthors
+} from '@/utils/githubTeams';
+
+const CONFIG = JSON.stringify({
+  org: 'zincwork',
+  teams: [
+    { slug: 'skipper', name: 'Skipper', members: ['ada', 'grace'] },
+    { slug: 'red', name: 'Red', members: ['linus'] },
+    { slug: 'ghost', name: 'Ghost', members: [] }
+  ]
+});
+
+describe('parseGithubTeamsConfig', () => {
+  it('parses teams', () => {
+    const teams = parseGithubTeamsConfig(CONFIG);
+    expect(teams).toHaveLength(3);
+    expect(teams[0]).toEqual({
+      slug: 'skipper',
+      name: 'Skipper',
+      members: ['ada', 'grace']
+    });
+  });
+
+  it('defaults a missing name to the slug and a missing member list to empty', () => {
+    const teams = parseGithubTeamsConfig(
+      JSON.stringify({ teams: [{ slug: 'skipper' }] })
+    );
+    expect(teams[0]).toEqual({ slug: 'skipper', name: 'skipper', members: [] });
+  });
+
+  it('drops entries with no slug', () => {
+    const teams = parseGithubTeamsConfig(
+      JSON.stringify({ teams: [{ name: 'No slug' }, { slug: 'ok' }] })
+    );
+    expect(teams.map((t) => t.slug)).toEqual(['ok']);
+  });
+
+  it('throws when teams is missing', () => {
+    expect(() => parseGithubTeamsConfig('{}')).toThrow(/teams/);
+  });
+});
+
+describe('resolveAuthors', () => {
+  const teams = parseGithubTeamsConfig(CONFIG);
+
+  it('returns the members of the named team', () => {
+    expect(resolveAuthors(teams, 'skipper')).toEqual(['ada', 'grace']);
+  });
+
+  it('returns nothing for the ALL sentinel', () => {
+    expect(resolveAuthors(teams, ALL_GITHUB_TEAMS)).toEqual([]);
+  });
+
+  it('returns nothing when no team is selected', () => {
+    expect(resolveAuthors(teams, null)).toEqual([]);
+    expect(resolveAuthors(teams, undefined)).toEqual([]);
+    expect(resolveAuthors(teams, '')).toEqual([]);
+  });
+
+  it('returns nothing for an unknown slug rather than throwing', () => {
+    expect(resolveAuthors(teams, 'nope')).toEqual([]);
+  });
+
+  it('returns nothing for a team with no members', () => {
+    expect(resolveAuthors(teams, 'ghost')).toEqual([]);
+  });
+});
+
+describe('applyAuthors', () => {
+  it('adds authors to an existing pr_filter without disturbing it', () => {
+    const prFilter = { base_branches: ['^main$'] };
+    expect(applyAuthors(prFilter, ['ada'])).toEqual({
+      base_branches: ['^main$'],
+      authors: ['ada']
+    });
+    // must not mutate the input
+    expect(prFilter).toEqual({ base_branches: ['^main$'] });
+  });
+
+  it('creates a pr_filter when there was none', () => {
+    // pr_filter is legitimately null when branch mode is ALL and no repo
+    // filters apply, so this path matters.
+    expect(applyAuthors(null, ['ada'])).toEqual({ authors: ['ada'] });
+    expect(applyAuthors(undefined, ['ada'])).toEqual({ authors: ['ada'] });
+  });
+
+  it('leaves pr_filter untouched when there are no authors', () => {
+    const prFilter = { base_branches: ['^main$'] };
+    expect(applyAuthors(prFilter, [])).toBe(prFilter);
+  });
+
+  it('returns null rather than an empty object when there is nothing to filter', () => {
+    // An empty object would be sent as pr_filter={} and is harmless, but null
+    // is what the route already produces, so keep the shape identical.
+    expect(applyAuthors(null, [])).toBeNull();
+  });
+});

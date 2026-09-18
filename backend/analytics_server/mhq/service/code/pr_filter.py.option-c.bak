@@ -41,13 +41,11 @@ class ParsePRFilterProcessor:
     def apply(self) -> PRFilter:
         authors: List[str] = self.__parse_pr_authors()
         base_branches: List[str] = self.__parse_pr_base_branches()
-        head_branches: List[str] = self.__parse_pr_head_branches()
         repo_filters: Dict[str, Dict] = self.__parse_repo_filters()
 
         return PRFilter(
             authors=authors,
             base_branches=base_branches,
-            head_branches=head_branches,
             repo_filters=repo_filters,
         )
 
@@ -59,14 +57,6 @@ class ParsePRFilterProcessor:
         if base_branches:
             base_branches: List[str] = regex_list(base_branches)
         return base_branches
-
-    def __parse_pr_head_branches(self) -> List[str]:
-        # Regex, like base_branches, because team branch prefixes are naturally
-        # patterns ("^blue/"). Unlike authors, which is an exact IN list.
-        head_branches: List[str] = self.pr_filter.get("head_branches")
-        if head_branches:
-            head_branches: List[str] = regex_list(head_branches)
-        return head_branches
 
     def __parse_repo_filters(self) -> Dict[str, Dict]:
         repo_filters: Dict[str, Dict] = self.pr_filter.get("repo_filters")

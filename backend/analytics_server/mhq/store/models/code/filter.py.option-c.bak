@@ -10,7 +10,6 @@ from mhq.store.models.code.pull_requests import PullRequest
 class PRFilter:
     authors: List[str] = None
     base_branches: List[str] = None
-    head_branches: List[str] = None
     repo_filters: Dict[str, Dict] = None
     excluded_pr_ids: List[str] = None
     max_cycle_time: int = None
@@ -101,18 +100,9 @@ class PRFilter:
 
             return PullRequest.author.in_(self.authors)
 
-        def _head_branches_query():
-            if not self.head_branches:
-                return None
-
-            return or_(
-                PullRequest.head_branch.op("~")(term) for term in self.head_branches
-            )
-
         conditions = {
             "authors": _authors_query(),
             "base_branches": _base_branch_query(),
-            "head_branches": _head_branches_query(),
             "repo_filters": _repo_filters_query(),
             "excluded_pr_ids": _excluded_pr_ids_query(),
             "max_cycle_time": _include_prs_below_max_cycle_time(),

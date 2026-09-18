@@ -21,7 +21,7 @@ import {
   getBranchesAndRepoFilter,
   getWorkFlowFiltersAsPayloadForSingleTeam
 } from '@/utils/filterUtils';
-import { withGithubTeamFilter } from '@/utils/githubTeams';
+import { withGithubTeamAuthors } from '@/utils/githubTeams';
 
 import { getTeamLeadTimePRs } from './insights';
 
@@ -35,8 +35,7 @@ const getSchema = yup.object().shape({
   from_date: yup.date().required(),
   to_date: yup.date().required(),
   branch_mode: yup.string().oneOf(Object.values(ActiveBranchMode)).required(),
-  github_team: yup.string().optional().nullable(),
-  attribution: yup.string().oneOf(['author', 'branch']).optional().nullable()
+  github_team: yup.string().optional().nullable()
 });
 
 const endpoint = new Endpoint(pathSchema);
@@ -53,8 +52,7 @@ endpoint.handle.GET(getSchema, async (req, res) => {
     to_date: rawToDate,
     branches,
     branch_mode,
-    github_team,
-    attribution
+    github_team
   } = req.payload;
 
   const from_date = isoDateString(startOfDay(new Date(rawFromDate)));
@@ -74,11 +72,7 @@ endpoint.handle.GET(getSchema, async (req, res) => {
         // Scope every PR-derived metric to the members of the selected GitHub
         // team. Lead time, PR-merge deployment frequency and PR-derived
         // incidents all funnel through PRFilter, so this covers them together.
-        pr_filter: withGithubTeamFilter(
-          pr_filter,
-          github_team as string,
-          attribution as string
-        )
+        pr_filter: withGithubTeamAuthors(pr_filter, github_team as string)
       })
     ),
     getWorkFlowFiltersAsPayloadForSingleTeam({

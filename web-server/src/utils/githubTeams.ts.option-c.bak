@@ -1,0 +1,113 @@
+/**
+ * GitHub team membership, used to scope DORA metrics to the people in a team.
+ *
+ * Membership is read from `web-server/config/github_teams.json` rather than
+ * synced from GitHub. That is deliberate for this first pass: no new database
+ * table, no ETL step, no provider abstraction to break. Regenerate the file
+ * with `make_github_teams_config.py` when team membership changes.
+ *
+ * Server-side only — it touches the filesystem. Client components must go via
+ * `/api/resources/github_teams`.
+ */
+
+import fs from 'fs';
+import path from 'path';
+
+export type GithubTeam = {
+  slug: string;
+  name: string;
+  members: string[];
+};
+
+export type GithubTeamsConfig = {
+  org?: string;
+  generated_at?: string;
+  teams: GithubTeam[];
+};
+
+/** Sentinel for "do not filter by author". Must match the frontend. */
+export const ALL_GITHUB_TEAMS = 'ALL';
+
+const CONFIG_PATH = path.join(process.cwd(), 'config', 'github_teams.json');
+
+let cache: { mtimeMs: number; teams: GithubTeam[] } | null = null;
+
+// --------------------------------------------------------------------------
+// Pure helpers — exported for testing, no filesystem access
+// --------------------------------------------------------------------------
+
+export const parseGithubTeamsConfig = (raw: string): GithubTeam[] => {
+  const parsed = JSON.parse(raw) as GithubTeamsConfig;
+  if (!parsed || !Array.isArray(parsed.teams)) {
+    throw new Error('github_teams.json must contain a "teams" array');
+  }
+  return parsed.teams
+    .filter((team) => team && team.slug)
+    .map((team) => ({
+      slug: team.slug,
+      name: team.name || team.slug,
+      members: Array.isArray(team.members) ? team.members.filter(Boolean) : []
+    }));
+};
+
+export const resolveAuthors = (
+  teams: GithubTeam[],
+  slug?: string | null
+): string[] => {
+  if (!slug || slug === ALL_GITHUB_TEAMS) return [];
+  return teams.find((team) => team.slug === slug)?.members ?? [];
+};
+
+/**
+ * Merge an author list into a pr_filter payload.
+ *
+ * Every PR-derived metric funnels through PRFilter on the backend, so adding
+ * `authors` here scopes lead time, PR-merge deployment frequency, and
+ * PR-derived incidents in one go.
+ *
+ * Note: `pr_filter` is legitimately null when no branch or repo filters apply,
+ * so this has to be able to create the object rather than only extend it.
+ */
+export const applyAuthors = <T extends object>(
+  prFilter: T | null | undefined,
+  authors: string[]
+): (T & { authors: string[] }) | T | null => {
+  if (!authors.length) return prFilter ?? null;
+  return { ...((prFilter ?? {}) as T), authors };
+};
+
+// --------------------------------------------------------------------------
+// Filesystem-backed accessors
+// --------------------------------------------------------------------------
+
+/**
+ * Read the config, re-reading only when the file changes on disk so that
+ * editing it does not require a restart.
+ */
+export const getGithubTeams = (): GithubTeam[] => {
+  try {
+    const { mtimeMs } = fs.statSync(CONFIG_PATH);
+    if (cache && cache.mtimeMs === mtimeMs) return cache.teams;
+
+    const teams = parseGithubTeamsConfig(
+      fs.readFileSync(CONFIG_PATH, 'utf-8')
+    );
+    cache = { mtimeMs, teams };
+    return teams;
+  } catch (err) {
+    // A missing or malformed config must not take the dashboard down — it just
+    // means no team filtering is available.
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.error('Could not read github_teams.json', err);
+    }
+    return [];
+  }
+};
+
+export const getGithubTeamMembers = (slug?: string | null): string[] =>
+  resolveAuthors(getGithubTeams(), slug);
+
+export const withGithubTeamAuthors = <T extends object>(
+  prFilter: T | null | undefined,
+  slug?: string | null
+) => applyAuthors(prFilter, getGithubTeamMembers(slug));

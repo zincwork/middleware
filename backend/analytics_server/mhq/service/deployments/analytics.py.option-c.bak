@@ -15,7 +15,6 @@ from mhq.store.models.code.workflows.filter import WorkflowFilter
 from mhq.service.deployments.models.models import (
     Deployment,
     DeploymentFrequencyMetrics,
-    DeploymentStatus,
 )
 
 from mhq.store.repos.code import CodeRepoService
@@ -93,8 +92,10 @@ class DeploymentAnalyticsService:
         workflow_filter: WorkflowFilter,
     ) -> DeploymentFrequencyMetrics:
 
-        team_successful_deployments = self._get_successful_deployments_for_metrics(
-            team_id, interval, pr_filter, workflow_filter
+        team_successful_deployments = (
+            self.deployments_service.get_team_successful_deployments_in_interval(
+                team_id, interval, pr_filter, workflow_filter
+            )
         )
 
         return self._get_deployment_frequency_metrics(
@@ -109,10 +110,10 @@ class DeploymentAnalyticsService:
         workflow_filter: WorkflowFilter,
     ) -> Dict[datetime, int]:
 
-        # Must use the same attribution as the headline figure — the card shows
-        # both together and they have to agree.
-        team_successful_deployments = self._get_successful_deployments_for_metrics(
-            team_id, interval, pr_filter, workflow_filter
+        team_successful_deployments = (
+            self.deployments_service.get_team_successful_deployments_in_interval(
+                team_id, interval, pr_filter, workflow_filter
+            )
         )
 
         team_weekly_deployments = generate_expanded_buckets(
@@ -120,61 +121,6 @@ class DeploymentAnalyticsService:
         )
 
         return get_key_to_count_map_from_key_to_list_map(team_weekly_deployments)
-
-    def _get_successful_deployments_for_metrics(
-        self,
-        team_id: str,
-        interval: Interval,
-        pr_filter: PRFilter,
-        workflow_filter: WorkflowFilter,
-    ) -> List[Deployment]:
-        """Successful deployments, attributed to the team when a filter is set.
-
-        Workflow deployments (CircleCI, GitHub Actions) are filtered on branch
-        only, so a PR-level filter such as an author or head-branch list would
-        otherwise have no effect on this metric — leaving two filtered DORA
-        cards beside two unfiltered ones, all looking equally authoritative.
-
-        When such a filter is active, count a deployment only if it carried at
-        least one PR that survived the filter: "how often did this team's work
-        reach production".
-
-        Two consequences, both deliberate:
-          * a deploy carrying nothing attributable — a re-run, a config-only
-            change — counts for nobody, so per-team figures sum to LESS than
-            the org-wide figure;
-          * a deploy carrying three teams' PRs counts once for each, so they
-            can also sum to MORE. Which way it goes depends on the mix.
-        """
-        if not self._is_pr_attributed(pr_filter):
-            return self.deployments_service.get_team_successful_deployments_in_interval(
-                team_id, interval, pr_filter, workflow_filter
-            )
-
-        repo_id_to_deployments_with_prs = (
-            self.get_team_all_deployments_in_interval_with_related_prs(
-                team_id, interval, pr_filter, workflow_filter
-            )
-        )
-
-        return [
-            deployment
-            for deployments_with_prs in repo_id_to_deployments_with_prs.values()
-            for deployment, prs in deployments_with_prs.items()
-            if prs and deployment.status == DeploymentStatus.SUCCESS
-        ]
-
-    @staticmethod
-    def _is_pr_attributed(pr_filter: PRFilter) -> bool:
-        """Is a team-level PR filter active?
-
-        Deliberately ignores base_branches and repo_filters: production-branch
-        filtering is always on, and must not push every request down the more
-        expensive attributed path.
-        """
-        if not pr_filter:
-            return False
-        return bool(pr_filter.authors) or bool(pr_filter.head_branches)
 
     def _map_prs_to_repo_id_and_base_branch(
         self, pull_requests: List[PullRequest]

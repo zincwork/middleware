@@ -9,7 +9,6 @@ import { DoraScoreV2 } from '@/components/DoraScoreV2';
 import { EmptyState } from '@/components/EmptyState';
 import { FixedContentRefreshLoader } from '@/components/FixedContentRefreshLoader/FixedContentRefreshLoader';
 import { FlexBox } from '@/components/FlexBox';
-import { GithubTeamFilterNotice } from '@/components/GithubTeamSelector';
 import { MiniLoader } from '@/components/MiniLoader';
 import { useOverlayPage } from '@/components/OverlayPageContext';
 import { SomethingWentWrong } from '@/components/SomethingWentWrong/SomethingWentWrong';
@@ -44,7 +43,6 @@ export const DoraMetricsBody = () => {
     [integrationList.length]
   );
   const { singleTeamId, dates } = useSingleTeamConfig();
-  const githubTeam = useSelector((s) => s.app.githubTeamSlug);
   const branchPayloadForPrFilters = useBranchesForPrFilters();
   const isLoading = useSelector(
     (s) => s.doraMetrics.requests?.metrics_summary === FetchState.REQUEST
@@ -75,7 +73,6 @@ export const DoraMetricsBody = () => {
         teamId: singleTeamId,
         fromDate: dates.start,
         toDate: dates.end,
-        githubTeam,
         ...branchPayloadForPrFilters
       })
     );
@@ -85,7 +82,6 @@ export const DoraMetricsBody = () => {
     dispatch,
     orgId,
     singleTeamId,
-    githubTeam,
     isCodeProviderIntegrated,
     branchPayloadForPrFilters
   ]);
@@ -123,7 +119,6 @@ export const DoraMetricsBody = () => {
   return (
     <FlexBox col gap2>
       <FixedContentRefreshLoader show={isLoading} />
-      <GithubTeamFilterNotice />
       <FlexBox gap={2}>
         {!!stats.avg && <DoraScoreV2 {...stats} />}
         <FlexBox fit gap1 ml="auto">
