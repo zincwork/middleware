@@ -41,7 +41,7 @@ ALL_TEAM_DEFAULT = "All Zinc"
 # HTTP plumbing
 # --------------------------------------------------------------------------
 
-def request(base_url, method, path, body=None):
+def request(base_url, method, path, body=None, tolerate_missing=False):
     url = base_url.rstrip("/") + path
     data = json.dumps(body).encode("utf-8") if body is not None else None
 
@@ -55,6 +55,11 @@ def request(base_url, method, path, body=None):
             raw = resp.read().decode("utf-8")
             return json.loads(raw) if raw.strip() else {}
     except urllib.error.HTTPError as err:
+        # An endpoint that does not exist in this build is not an error when
+        # the caller is only probing for it (e.g. the CircleCI route on an
+        # install without Option C).
+        if tolerate_missing:
+            return None
         detail = err.read().decode("utf-8", errors="replace")[:800]
         sys.exit(
             "{} {} failed with HTTP {}\n\n{}\n\n"
@@ -63,6 +68,8 @@ def request(base_url, method, path, body=None):
             "with: docker compose logs -f".format(method, path, err.code, detail)
         )
     except urllib.error.URLError as err:
+        if tolerate_missing:
+            return None
         sys.exit(
             "Could not reach Middleware at {}: {}\n\n"
             "Is it running? The web app listens on port 3333 by default.\n"
@@ -123,6 +130,68 @@ def prod_branch_payload(team_id, repo_branch_rows, wanted_by_name):
 # --------------------------------------------------------------------------
 # Work
 # --------------------------------------------------------------------------
+
+def capture_circleci_config(base_url, org_id):
+    """Snapshot any active CircleCI deploy-job configuration.
+
+    This script assigns repos to teams through the teams/v2 route, and that
+    route DEACTIVATES every DEPLOYMENT workflow for a team's repos before
+    re-inserting the ones in the payload (teams/v2.ts, "Step 2: Disable all
+    workflows"). This config carries no workflows, so a CircleCI setup would
+    be silently switched off — and every repo here is PR_MERGE, which also
+    reverts deployment_type.
+
+    So: capture it first, put it back afterwards.
+    """
+    result = request(
+        base_url, "GET", "/api/resources/orgs/{}/circleci_workflows".format(org_id),
+        tolerate_missing=True,
+    )
+    if result is None:
+        return []
+
+    restore = []
+    for row in result.get("workflows") or []:
+        if not row.get("is_active"):
+            continue
+        meta = row.get("meta") or {}
+        workflow_name = meta.get("workflow_name")
+        job_name = meta.get("job_name")
+        if not (workflow_name and job_name):
+            # Fall back to splitting "<workflow>/<job>".
+            parts = (row.get("provider_workflow_id") or "").split("/", 1)
+            if len(parts) != 2:
+                continue
+            workflow_name, job_name = parts
+        restore.append({
+            "repo_name": row.get("repo_name"),
+            "workflow_name": workflow_name,
+            "job_name": job_name,
+            "branch": meta.get("branch") or "main",
+            "project_slug": meta.get("project_slug") or "",
+        })
+    return restore
+
+
+def restore_circleci_config(base_url, org_id, restore, dry_run):
+    if not restore:
+        return
+    print("Restoring CircleCI deploy-job configuration ({} repo(s))".format(
+        len(restore)))
+    for entry in restore:
+        print("  {} -> {}/{} on {}".format(
+            entry["repo_name"], entry["workflow_name"], entry["job_name"],
+            entry["branch"]))
+    if dry_run:
+        print("  (dry run — not sent)")
+        return
+    request(
+        base_url, "PUT",
+        "/api/resources/orgs/{}/circleci_workflows".format(org_id),
+        {"workflows": restore},
+    )
+    print("  restored — deployment_type is back to WORKFLOW")
+
 
 def apply_team(base_url, org_id, org, name, repos, existing_by_name, dry_run):
     """Create or update one Middleware team. Returns the team id, or None on dry run."""
@@ -210,6 +279,10 @@ def main():
                     help="Only apply these GitHub team slugs. Repeatable.")
     ap.add_argument("--skip-prod-branches", action="store_true",
                     help="Do not set production branches.")
+    ap.add_argument("--skip-circleci-restore", action="store_true",
+                    help="Do not put the CircleCI deploy-job configuration back "
+                         "afterwards. Only use this if you want deployment "
+                         "frequency to go back to counting merges into main.")
     args = ap.parse_args()
 
     try:
@@ -260,6 +333,18 @@ def main():
     if not jobs:
         sys.exit("Nothing to do. Check --only, or the config's team repo lists.")
 
+    # Assigning repos to teams deactivates every DEPLOYMENT workflow on those
+    # repos and resets deployment_type to whatever this config says (PR_MERGE).
+    # Capture any CircleCI setup now so it can be put back afterwards.
+    circleci_restore = capture_circleci_config(args.base_url, org_id)
+    if circleci_restore:
+        print("CircleCI integration detected on {} repo(s).".format(
+            len(circleci_restore)))
+        print("This run would switch it off, so it will be restored at the end.")
+        print("")
+    if args.skip_circleci_restore:
+        circleci_restore = []
+
     if args.dry_run:
         print("DRY RUN — nothing will be sent.\n")
 
@@ -272,6 +357,12 @@ def main():
                 apply_prod_branches(args.base_url, None, name, repos, True)
             else:
                 apply_prod_branches(args.base_url, team_id, name, repos, False)
+        print("")
+
+    restore_circleci_config(
+        args.base_url, org_id, circleci_restore, args.dry_run
+    )
+    if circleci_restore and not args.dry_run:
         print("")
 
     if args.dry_run:

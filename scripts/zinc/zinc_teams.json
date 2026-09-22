@@ -1,6 +1,6 @@
 {
   "org": "zincwork",
-  "generated_at": "2026-09-04T11:30:25.560329+00:00",
+  "generated_at": "2026-09-22T07:46:10.307251+00:00",
   "min_permission": "push",
   "include_archived": false,
   "default_deployment_type": "PR_MERGE",
@@ -11,8 +11,6 @@
       "parent": "developers",
       "middleware_team_name": "Bliss",
       "members": [
-        "RobJLeonard",
-        "abbiehowell-zinc",
         "joedavies25",
         "lucilasanjurjo-zinc",
         "mohamed-zinc",
@@ -211,6 +209,7 @@
         "ak-30",
         "alisdairlittle",
         "ckpanteli",
+        "elenaharan",
         "emily-dy-yoon",
         "hugo-zinc",
         "jackcleary01",
@@ -218,11 +217,13 @@
         "khomch",
         "lucilasanjurjo-zinc",
         "lukeross",
+        "matthew-wagerfield-zinc",
         "mohamed-zinc",
         "muhammadali96",
         "primlaothamatas",
         "rhodger",
         "sanjeevvp",
+        "tanapat-zinc",
         "tinapan-zinc",
         "vshleifman",
         "zincsfoley"
@@ -380,7 +381,6 @@
       "middleware_team_name": "Engineering",
       "members": [
         "RobJLeonard",
-        "Zn0Kelvin",
         "abbiehowell-zinc",
         "ak-30",
         "alisdairlittle",
@@ -403,6 +403,7 @@
         "rhodger",
         "sanjeevvp",
         "shervinm95",
+        "tanapat-zinc",
         "tinapan-zinc",
         "vshleifman",
         "zinc-deployment",
@@ -541,7 +542,8 @@
         "RobJLeonard",
         "iliasu-zinc",
         "pahwzinc",
-        "sanjeevvp"
+        "sanjeevvp",
+        "ship-claude-alias"
       ],
       "repos": []
     },
@@ -558,6 +560,162 @@
       "repos": []
     },
     {
+      "slug": "integrations",
+      "name": "Integrations",
+      "parent": "developers",
+      "middleware_team_name": "Integrations",
+      "members": [
+        "elenaharan",
+        "lucilasanjurjo-zinc",
+        "matthew-wagerfield-zinc"
+      ],
+      "repos": [
+        {
+          "id": 975143707,
+          "name": "gen-ai",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 1027863680,
+          "name": "metabase-queries",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 706592444,
+          "name": "mono-app",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 134390104,
+          "name": "mvp-api",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 134470598,
+          "name": "mvp-app",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 612211389,
+          "name": "share-code-service",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 133939927,
+          "name": "story-omnibus",
+          "default_branch": "master",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^master$"
+          ]
+        },
+        {
+          "id": 1216131056,
+          "name": "zinc-mobile-app",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 901398402,
+          "name": "zinc-pdf2image",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 1114444102,
+          "name": "zinc-report-generation",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 309650027,
+          "name": "zinc-technical-test",
+          "default_branch": "master",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^master$"
+          ]
+        },
+        {
+          "id": 795504109,
+          "name": "zinc-terraform",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        },
+        {
+          "id": 982170108,
+          "name": "zinc-utils",
+          "default_branch": "main",
+          "permission": "push",
+          "archived": false,
+          "deployment_type": "PR_MERGE",
+          "prod_branches": [
+            "^main$"
+          ]
+        }
+      ]
+    },
+    {
       "slug": "operations",
       "name": "Operations",
       "parent": null,
@@ -568,6 +726,7 @@
         "dancourse-zincwork",
         "fathiyaabdalla",
         "iliasu-zinc",
+        "jackbrowne-lgtm",
         "jaredd-zinc",
         "joelblackburn-ui",
         "kirtyadarsh-hue",
@@ -610,10 +769,10 @@
       "parent": "developers",
       "middleware_team_name": "Red Team",
       "members": [
-        "RobJLeonard",
         "hugo-zinc",
         "khomch",
         "lukeross",
+        "tanapat-zinc",
         "vshleifman"
       ],
       "repos": [
@@ -768,7 +927,7 @@
       "parent": "developers",
       "middleware_team_name": "Scallops",
       "members": [
-        "RobJLeonard",
+        "abbiehowell-zinc",
         "ckpanteli",
         "muhammadali96",
         "primlaothamatas"
@@ -920,12 +1079,21 @@
       ]
     },
     {
+      "slug": "ship-s-team",
+      "name": "Ship's team",
+      "parent": null,
+      "middleware_team_name": "Ship's team",
+      "members": [
+        "dancourse-zincwork"
+      ],
+      "repos": []
+    },
+    {
       "slug": "skipper",
       "name": "Skipper",
       "parent": "developers",
       "middleware_team_name": "Skipper",
       "members": [
-        "RobJLeonard",
         "ak-30",
         "alisdairlittle",
         "emily-dy-yoon",
@@ -1261,17 +1429,6 @@
       ]
     },
     {
-      "id": 137499980,
-      "name": "contracts",
-      "default_branch": "master",
-      "permission": "n/a",
-      "archived": false,
-      "deployment_type": "PR_MERGE",
-      "prod_branches": [
-        "^master$"
-      ]
-    },
-    {
       "id": 975143707,
       "name": "gen-ai",
       "default_branch": "main",
@@ -1285,6 +1442,17 @@
     {
       "id": 1027863680,
       "name": "metabase-queries",
+      "default_branch": "main",
+      "permission": "n/a",
+      "archived": false,
+      "deployment_type": "PR_MERGE",
+      "prod_branches": [
+        "^main$"
+      ]
+    },
+    {
+      "id": 1375641449,
+      "name": "middleware",
       "default_branch": "main",
       "permission": "n/a",
       "archived": false,

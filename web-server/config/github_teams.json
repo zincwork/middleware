@@ -1,14 +1,12 @@
 {
   "org": "zincwork",
-  "generated_at": "2026-09-04T14:28:52.455969+00:00",
-  "source": "/Users/alisdairlittle/Claude/Projects/Coding Advice/option-a/zinc_teams.json",
+  "generated_at": "2026-09-22T07:54:47.256920+00:00",
+  "source": "/Users/alisdairlittle/Downloads/middleware/scripts/zinc/zinc_teams.json",
   "teams": [
     {
       "slug": "bliss",
       "name": "Bliss",
       "members": [
-        "RobJLeonard",
-        "abbiehowell-zinc",
         "joedavies25",
         "lucilasanjurjo-zinc",
         "mohamed-zinc",
@@ -48,6 +46,7 @@
         "ak-30",
         "alisdairlittle",
         "ckpanteli",
+        "elenaharan",
         "emily-dy-yoon",
         "hugo-zinc",
         "jackcleary01",
@@ -55,11 +54,13 @@
         "khomch",
         "lucilasanjurjo-zinc",
         "lukeross",
+        "matthew-wagerfield-zinc",
         "mohamed-zinc",
         "muhammadali96",
         "primlaothamatas",
         "rhodger",
         "sanjeevvp",
+        "tanapat-zinc",
         "tinapan-zinc",
         "vshleifman",
         "zincsfoley"
@@ -71,7 +72,6 @@
       "name": "Engineering",
       "members": [
         "RobJLeonard",
-        "Zn0Kelvin",
         "abbiehowell-zinc",
         "ak-30",
         "alisdairlittle",
@@ -94,6 +94,7 @@
         "rhodger",
         "sanjeevvp",
         "shervinm95",
+        "tanapat-zinc",
         "tinapan-zinc",
         "vshleifman",
         "zinc-deployment",
@@ -108,7 +109,8 @@
         "RobJLeonard",
         "iliasu-zinc",
         "pahwzinc",
-        "sanjeevvp"
+        "sanjeevvp",
+        "ship-claude-alias"
       ],
       "branch_prefixes": []
     },
@@ -123,6 +125,16 @@
       "branch_prefixes": []
     },
     {
+      "slug": "integrations",
+      "name": "Integrations",
+      "members": [
+        "elenaharan",
+        "lucilasanjurjo-zinc",
+        "matthew-wagerfield-zinc"
+      ],
+      "branch_prefixes": []
+    },
+    {
       "slug": "operations",
       "name": "Operations",
       "members": [
@@ -131,6 +143,7 @@
         "dancourse-zincwork",
         "fathiyaabdalla",
         "iliasu-zinc",
+        "jackbrowne-lgtm",
         "jaredd-zinc",
         "joelblackburn-ui",
         "kirtyadarsh-hue",
@@ -167,10 +180,10 @@
       "slug": "red-team",
       "name": "Red Team",
       "members": [
-        "RobJLeonard",
         "hugo-zinc",
         "khomch",
         "lukeross",
+        "tanapat-zinc",
         "vshleifman"
       ],
       "branch_prefixes": [
@@ -182,7 +195,7 @@
       "slug": "scallops",
       "name": "Scallops",
       "members": [
-        "RobJLeonard",
+        "abbiehowell-zinc",
         "ckpanteli",
         "muhammadali96",
         "primlaothamatas"
@@ -193,10 +206,17 @@
       ]
     },
     {
+      "slug": "ship-s-team",
+      "name": "Ship's team",
+      "members": [
+        "dancourse-zincwork"
+      ],
+      "branch_prefixes": []
+    },
+    {
       "slug": "skipper",
       "name": "Skipper",
       "members": [
-        "RobJLeonard",
         "ak-30",
         "alisdairlittle",
         "emily-dy-yoon",
