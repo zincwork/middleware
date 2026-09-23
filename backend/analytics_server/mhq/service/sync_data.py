@@ -1,6 +1,7 @@
 from mhq.service.code import sync_code_repos
 from mhq.service.incidents import sync_org_incidents
 from mhq.service.merge_to_deploy_broker import process_merge_to_deploy_cache
+from mhq.service.tickets import sync_org_tickets
 from mhq.service.workflows import sync_org_workflows
 from mhq.utils.log import LOG
 
@@ -9,6 +10,11 @@ sync_sequence = [
     sync_org_workflows,
     process_merge_to_deploy_cache,
     sync_org_incidents,
+    # Last, and after the code sync, so ticket-to-pull-request links resolve
+    # against PullRequest rows from the same pass. trigger_data_sync wraps
+    # every step in try/except and continues, so a failure here cannot affect
+    # any of the four above. With no Shortcut integration it returns at once.
+    sync_org_tickets,
 ]
 
 

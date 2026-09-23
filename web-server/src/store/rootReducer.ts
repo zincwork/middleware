@@ -3,6 +3,7 @@ import { combineReducers } from '@reduxjs/toolkit';
 import { actionsSlice } from '@/slices/actions';
 import { appSlice } from '@/slices/app';
 import { authSlice } from '@/slices/auth';
+import { cockpitSlice } from '@/slices/cockpit';
 import { doraMetricsSlice } from '@/slices/dora_metrics';
 import { loadLinkSlice } from '@/slices/loadLink';
 import { orgSlice } from '@/slices/org';
@@ -16,6 +17,7 @@ export const rootReducer = combineReducers({
   team: teamSlice.reducer,
   org: orgSlice.reducer,
   doraMetrics: doraMetricsSlice.reducer,
+  cockpit: cockpitSlice.reducer,
   loadLink: loadLinkSlice.reducer,
   service: serviceSlice.reducer
 });

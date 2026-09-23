@@ -16,7 +16,10 @@
       "branch_prefixes": [
         "gold",
         "bliss"
-      ]
+      ],
+      "shortcut_team_id": "67a23586-5b81-45d2-ae4b-d1ee01c61b50",
+      "shortcut_team_name": "Bliss",
+      "manager": "Lucila Sanjurjo"
     },
     {
       "slug": "core-platform-collaborators",
@@ -132,7 +135,10 @@
         "lucilasanjurjo-zinc",
         "matthew-wagerfield-zinc"
       ],
-      "branch_prefixes": []
+      "branch_prefixes": [],
+      "shortcut_team_id": "6a2c09a9-a226-41e9-8dd1-58224c66b28a",
+      "shortcut_team_name": "Integrations",
+      "manager": "Lucila Sanjurjo"
     },
     {
       "slug": "operations",
@@ -189,7 +195,10 @@
       "branch_prefixes": [
         "red",
         "red-team"
-      ]
+      ],
+      "shortcut_team_id": "677beef8-c62d-4569-84f8-5d281a7b8515",
+      "shortcut_team_name": "Red Team",
+      "manager": "Anton Khomchenko"
     },
     {
       "slug": "scallops",
@@ -203,7 +212,10 @@
       "branch_prefixes": [
         "green",
         "scallops"
-      ]
+      ],
+      "shortcut_team_id": "660c266a-2ad5-4899-8154-3cf6aa041db8",
+      "shortcut_team_name": "Scallops",
+      "manager": "Christos Panteli"
     },
     {
       "slug": "ship-s-team",
@@ -226,7 +238,10 @@
       "branch_prefixes": [
         "blue",
         "skipper"
-      ]
+      ],
+      "shortcut_team_id": "677be3f3-b1d5-488b-b5ba-9d3ca7d5012b",
+      "shortcut_team_name": "Skipper",
+      "manager": "Alisdair Little"
     },
     {
       "slug": "tech-ops",
@@ -238,7 +253,11 @@
         "shervinm95",
         "zinc-deployment"
       ],
-      "branch_prefixes": []
+      "branch_prefixes": [],
+      "shortcut_team_id": "66278edb-ecb6-4f4d-8d1d-98356278956c",
+      "shortcut_team_name": "Tech Ops"
     }
-  ]
+  ],
+  "shortcut_mapped_at": "2026-09-22T16:50:26.994272+00:00",
+  "managers_set_at": "2026-09-22T17:00:11.910598+00:00"
 }

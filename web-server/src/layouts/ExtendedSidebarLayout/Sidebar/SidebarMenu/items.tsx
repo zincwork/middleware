@@ -2,6 +2,7 @@ import {
   ExtensionTwoTone,
   GroupsTwoTone,
   Analytics,
+  FlightTakeoffTwoTone,
   Settings,
   Dns
 } from '@mui/icons-material';
@@ -38,6 +39,7 @@ export interface MenuItems {
 
 export enum SideBarItems {
   DORA_METRICS = 'DORA Metrics',
+  COCKPIT = 'Cockpit',
   MANAGE_TEAMS = 'Manage Teams',
   MANAGE_INTEGRATIONS = 'Manage Integrations',
   SERVER_ADMIN = 'Server Admin'
@@ -51,6 +53,11 @@ const menuItems = (): MenuItems[] => [
         name: 'DORA Metrics',
         icon: Analytics,
         link: ROUTES.DORA_METRICS.PATH
+      },
+      {
+        name: 'Cockpit',
+        icon: FlightTakeoffTwoTone,
+        link: ROUTES.COCKPIT.PATH
       },
       {
         name: 'Manage Teams',
