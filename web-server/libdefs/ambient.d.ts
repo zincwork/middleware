@@ -77,6 +77,13 @@ declare namespace NodeJS {
     INTERNAL_SYNC_API_BASE_URL: string;
     SECRET_PUBLIC_KEY: string;
     SECRET_PRIVATE_KEY: string;
+    NEXTAUTH_URL?: string;
+    NEXTAUTH_SECRET?: string;
+    AUTH0_CLIENT_ID?: string;
+    AUTH0_CLIENT_SECRET?: string;
+    AUTH0_ISSUER?: string;
+    ALLOWED_EMAIL_DOMAIN?: string;
+    AUTH_DISABLED?: 'true' | 'false';
     DB_HOST: string;
     DB_NAME: string;
     DB_PASS: string;
