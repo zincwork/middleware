@@ -23,7 +23,7 @@ from mhq.api.resources.incident_resources import (
     adapt_deployments_with_related_incidents,
     adapt_incident,
     adapt_mean_time_to_recovery_metrics,
-    adapt_production_bug_attribution,
+    adapt_regression_attribution,
 )
 from mhq.store.models.incidents import Incident
 from mhq.api.request_utils import coerce_workflow_filter, queryschema
@@ -308,7 +308,7 @@ def _get_cfr_inputs(
     )
 
 
-@app.route("/teams/<team_id>/production_bugs", methods=["GET"])
+@app.route("/teams/<team_id>/regressions", methods=["GET"])
 @queryschema(
     Schema(
         {
@@ -318,13 +318,13 @@ def _get_cfr_inputs(
         }
     ),
 )
-def get_team_production_bugs(
+def get_team_regressions(
     team_id: str,
     from_time: datetime,
     to_time: datetime,
     pr_filter: typeOptional[Dict] = None,
 ):
-    """Every production-labelled bug raised in the window, and how (or why
+    """Every regression-labelled bug raised in the window, and how (or why
     not) it was tied to a culprit PR. Bugs that could not be attributed are
     excluded from CFR, so this is where to see gaps in the team convention."""
     query_validator = get_query_validator()
@@ -335,7 +335,7 @@ def get_team_production_bugs(
         pr_filter, EntityType.TEAM, team_id, [SettingType.EXCLUDED_PRS_SETTING]
     )
 
-    attributions = get_incident_service().get_team_production_bug_attributions(
+    attributions = get_incident_service().get_team_regression_attributions(
         team_id, interval, pr_filter
     )
-    return [adapt_production_bug_attribution(a) for a in attributions]
+    return [adapt_regression_attribution(a) for a in attributions]

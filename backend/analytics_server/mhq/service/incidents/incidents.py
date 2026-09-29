@@ -10,7 +10,7 @@ from mhq.service.incidents.models.mean_time_to_recovery import (
     ChangeFailureRateMetrics,
     MeanTimeToRecoveryMetrics,
 )
-from mhq.service.deployments.models.models import Deployment
+from mhq.service.deployments.models.models import Deployment, DeploymentType
 from mhq.service.incidents.incident_filter import apply_incident_filter
 from mhq.store.models.incidents.filter import IncidentFilter
 from mhq.store.models.settings import EntityType, SettingType
@@ -29,14 +29,19 @@ from mhq.service.settings.configuration_settings import (
 )
 from mhq.store.repos.incidents import IncidentsRepoService
 from mhq.service.incidents.models.adapter import adaptIncidentPR
-from mhq.service.incidents.production_bugs import (
+from mhq.service.incidents.regressions import (
     AttributionStatus,
-    ProductionBugAttribution,
-    ProductionBugAttributor,
-    adapt_production_bug_incident,
+    RegressionAttribution,
+    RegressionAttributor,
+    adapt_regression_incident,
     get_incident_culprit_pr_id,
 )
+from mhq.service.incidents.rollbacks import (
+    adapt_rollback_incidents,
+    get_incident_failed_deployment_ids,
+)
 from mhq.store.repos.core import CoreRepoService
+from mhq.store.repos.workflows import WorkflowRepoService
 from mhq.store.repos.tickets import TicketsRepoService
 from mhq.service.code.pr_filter import apply_pr_filter
 from dataclasses import asdict
@@ -48,16 +53,18 @@ class IncidentService:
         incidents_repo_service: IncidentsRepoService,
         settings_service: SettingsService,
         code_repo_service: CodeRepoService,
-        production_bug_attributor: Optional[ProductionBugAttributor] = None,
+        regression_attributor: Optional[RegressionAttributor] = None,
         core_repo_service: Optional[CoreRepoService] = None,
+        workflow_repo_service: Optional[WorkflowRepoService] = None,
     ):
         self._incidents_repo_service = incidents_repo_service
         self._settings_service = settings_service
         self._code_repo_service = code_repo_service
         # Optional so existing unit tests can omit them; without them there are
-        # simply no production-bug incidents.
-        self._production_bug_attributor = production_bug_attributor
+        # simply no regression incidents.
+        self._regression_attributor = regression_attributor
         self._core_repo_service = core_repo_service
+        self._workflow_repo_service = workflow_repo_service
 
     def get_resolved_team_incidents(
         self, team_id: str, interval: Interval, pr_filter: PRFilter
@@ -75,17 +82,24 @@ class IncidentService:
             team_id, interval, incident_filter
         )
         resolved_pr_incidents = self.get_team_pr_incidents(team_id, interval, pr_filter)
-        resolved_production_bugs = [
+        resolved_regressions = [
             incident
-            for incident in self.get_team_production_bug_incidents(
+            for incident in self.get_team_regression_incidents(
                 team_id, interval, pr_filter
             )
             if incident.resolved_date
             and interval.from_time <= incident.resolved_date <= interval.to_time
         ]
 
+        resolved_rollbacks = [
+            incident
+            for incident in self.get_team_rollback_incidents(team_id, interval)
+            if interval.from_time <= incident.resolved_date <= interval.to_time
+        ]
+
         return self._merge_incidents(
-            resolved_incidents + resolved_pr_incidents, resolved_production_bugs
+            resolved_incidents + resolved_pr_incidents + resolved_rollbacks,
+            resolved_regressions,
         )
 
     def get_team_incidents(
@@ -106,11 +120,34 @@ class IncidentService:
         pr_incidents: List[Incident] = self.get_team_pr_incidents(
             team_id, interval, pr_filter
         )
-        production_bugs: List[Incident] = self.get_team_production_bug_incidents(
+        regressions: List[Incident] = self.get_team_regression_incidents(
             team_id, interval, pr_filter
         )
+        rollbacks: List[Incident] = self.get_team_rollback_incidents(team_id, interval)
 
-        return self._merge_incidents(incidents + pr_incidents, production_bugs)
+        return self._merge_incidents(incidents + pr_incidents + rollbacks, regressions)
+
+    def get_team_rollback_incidents(
+        self, team_id: str, interval: Interval
+    ) -> List[Incident]:
+        """Rollbacks since interval start (a rollback always follows the
+        deploys it undid, so any undone deploy in the interval is covered)."""
+        if not self._workflow_repo_service:
+            return []
+        team_repos = self._code_repo_service.get_active_team_repos_by_team_id(team_id)
+        repo_ids = [str(team_repo.org_repo_id) for team_repo in team_repos]
+        rollbacks = self._workflow_repo_service.get_rollback_runs(
+            repo_ids, interval.from_time
+        )
+        repo_names = (
+            {
+                str(repo.id): repo.name
+                for repo in self._code_repo_service.get_repos_by_ids(repo_ids)
+            }
+            if rollbacks
+            else {}
+        )
+        return adapt_rollback_incidents(rollbacks, repo_names)
 
     @staticmethod
     def _merge_incidents(
@@ -118,7 +155,7 @@ class IncidentService:
     ) -> List[Incident]:
         """De-duplicate on key, keeping `preferred` on a clash.
 
-        Production bugs are keyed on their culprit PR, like revert incidents,
+        regressions are keyed on their culprit PR, like revert incidents,
         so a bug and a revert of the same PR are one incident. The bug wins
         because it carries when the failure was actually noticed.
         """
@@ -126,11 +163,11 @@ class IncidentService:
         merged.update({incident.key: incident for incident in preferred})
         return sorted(merged.values(), key=lambda x: x.creation_date)
 
-    def get_team_production_bug_attributions(
+    def get_team_regression_attributions(
         self, team_id: str, interval: Interval, pr_filter: PRFilter = None
-    ) -> List[ProductionBugAttribution]:
-        """Every production bug raised since interval start, attributed or not."""
-        if not self._production_bug_attributor or not self._core_repo_service:
+    ) -> List[RegressionAttribution]:
+        """Every regression raised since interval start, attributed or not."""
+        if not self._regression_attributor or not self._core_repo_service:
             return []
         team = self._core_repo_service.get_team(team_id)
         if not team:
@@ -146,7 +183,7 @@ class IncidentService:
             entity_type=EntityType.TEAM,
             entity_id=team_id,
         )
-        return self._production_bug_attributor.attribute(
+        return self._regression_attributor.attribute(
             org_id=str(team.org_id),
             team_repo_ids=team_repo_ids,
             setting=settings.specific_settings if settings else None,
@@ -154,12 +191,12 @@ class IncidentService:
             pr_filter=pr_filter,
         )
 
-    def get_team_production_bug_incidents(
+    def get_team_regression_incidents(
         self, team_id: str, interval: Interval, pr_filter: PRFilter = None
     ) -> List[Incident]:
         return [
-            adapt_production_bug_incident(attribution)
-            for attribution in self.get_team_production_bug_attributions(
+            adapt_regression_incident(attribution)
+            for attribution in self.get_team_regression_attributions(
                 team_id, interval, pr_filter
             )
             if attribution.status == AttributionStatus.ATTRIBUTED
@@ -346,8 +383,9 @@ class IncidentService:
     ) -> Dict[Deployment, List[Incident]]:
         """Each counted deployment -> the incidents it caused.
 
-        An incident whose culprit PR is known (revert PRs, production bugs)
-        belongs to the deployment that shipped that PR. This replaces "the last
+        A rollback belongs to the deployments it undid. An incident whose
+        culprit PR is known (revert PRs, regressions) belongs to the
+        deployment that shipped that PR. This replaces "the last
         deployment before the incident", which blames the previous release
         whenever deploys lag merges, as approval-gated CircleCI deploys do.
         Incidents with no culprit (from an incident service) keep that rule.
@@ -367,10 +405,15 @@ class IncidentService:
             counted = list(deployments)
 
         incidents_by_culprit: Dict[str, List[Incident]] = defaultdict(list)
+        incidents_by_failed_run: Dict[str, List[Incident]] = defaultdict(list)
         uncorrelated: List[Incident] = []
         for incident in incidents:
+            failed_run_ids = get_incident_failed_deployment_ids(incident)
             culprit_id = get_incident_culprit_pr_id(incident)
-            if culprit_id:
+            if failed_run_ids:
+                for run_id in failed_run_ids:
+                    incidents_by_failed_run[str(run_id)].append(incident)
+            elif culprit_id:
                 incidents_by_culprit[str(culprit_id)].append(incident)
             else:
                 uncorrelated.append(incident)
@@ -384,6 +427,10 @@ class IncidentService:
         result: Dict[Deployment, List[Incident]] = {}
         for deployment in counted:
             related = list(time_based.get(deployment, []))
+            if deployment.deployment_type == DeploymentType.WORKFLOW:
+                related.extend(
+                    incidents_by_failed_run.get(str(deployment.entity_id), [])
+                )
             for pr_id in deployment_pr_ids.get(deployment, set()):
                 related.extend(incidents_by_culprit.get(pr_id, []))
             result[deployment] = related
@@ -506,6 +553,7 @@ def get_incident_service():
         IncidentsRepoService(),
         get_settings_service(),
         code_repo_service,
-        ProductionBugAttributor(TicketsRepoService(), code_repo_service),
+        RegressionAttributor(TicketsRepoService(), code_repo_service),
         CoreRepoService(),
+        WorkflowRepoService(),
     )

@@ -265,6 +265,33 @@ class WorkflowRepoService:
             if meta and isinstance(meta.get("shipped"), dict)
         }
 
+    @rollback_on_exc
+    def get_rollback_runs(
+        self, repo_ids: List[str], from_time: datetime
+    ) -> List[Tuple[RepoWorkflow, RepoWorkflowRuns]]:
+        """Deploys that redeployed an older revision, since `from_time`.
+
+        Recorded by the deployment commits sync as meta.shipped.status ==
+        "behind", with the deploys they undid in meta.shipped.rolled_back.
+        """
+        if not repo_ids:
+            return []
+        query = (
+            self._db.session.query(RepoWorkflow, RepoWorkflowRuns)
+            .options(defer(RepoWorkflow.meta))
+            .join(
+                RepoWorkflowRuns, RepoWorkflow.id == RepoWorkflowRuns.repo_workflow_id
+            )
+        )
+        query = self._filter_active_repo_workflows(query)
+        query = self._filter_repo_workflows_by_repo_ids(query, repo_ids)
+        query = query.filter(
+            RepoWorkflowRuns.status == RepoWorkflowRunsStatus.SUCCESS,
+            RepoWorkflowRuns.conducted_at >= from_time,
+            RepoWorkflowRuns.meta["shipped"]["status"].astext == "behind",
+        )
+        return query.order_by(RepoWorkflowRuns.conducted_at.asc()).all()
+
     def _filter_active_repo_workflows(self, query):
         return query.filter(
             RepoWorkflow.is_active.is_(True),

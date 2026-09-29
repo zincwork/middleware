@@ -1,7 +1,7 @@
 """
-Tests for turning Shortcut production bugs into incidents with a culprit PR.
+Tests for turning Shortcut regressions into incidents with a culprit PR.
 
-Chain: bug labelled `production` -> linked fix PR -> culprit PR it names.
+Chain: bug labelled `regression` -> linked fix PR -> culprit PR it names.
 Every link can be missing, and each gap must be reported, not dropped.
 """
 
@@ -9,11 +9,11 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from mhq.service.incidents.production_bugs import (
+from mhq.service.incidents.regressions import (
     DEFAULT_CULPRIT_FILTERS,
     AttributionStatus,
-    ProductionBugAttributor,
-    adapt_production_bug_incident,
+    RegressionAttributor,
+    adapt_regression_incident,
     extract_culprit_number,
     get_incident_culprit_pr_id,
 )
@@ -40,7 +40,7 @@ def _bug(key="sc-100"):
         title=f"Checkout broken ({key})",
         ticket_type="bug",
         url=f"https://app.shortcut.com/zinc/story/{key}",
-        labels=["production"],
+        labels=["regression"],
         provider_created_at=T0 + timedelta(hours=3),
         completed_at=T0 + timedelta(hours=9),
     )
@@ -77,7 +77,7 @@ def _attributor(bugs, links, prs, pr_filter_keeps=None):
     code_repo.get_repo_pr_by_number.side_effect = lambda repo_id, n: by_number.get(
         (str(repo_id), str(n))
     )
-    return ProductionBugAttributor(tickets_repo, code_repo), tickets_repo
+    return RegressionAttributor(tickets_repo, code_repo), tickets_repo
 
 
 def _link(bug, pr):
@@ -183,14 +183,14 @@ class TestAttribution:
     def test_label_comes_from_the_setting(self):
         attributor, tickets_repo = _attributor([], [], [])
         setting = IncidentPRsSetting(
-            include_revert_prs=True, filters=[], production_bug_label="prod-incident"
+            include_revert_prs=True, filters=[], regression_label="prod-incident"
         )
         _attribute(attributor, setting)
         assert (
             tickets_repo.get_bug_tickets_with_label.call_args.args[1] == "prod-incident"
         )
         _attribute(attributor, None)
-        assert tickets_repo.get_bug_tickets_with_label.call_args.args[1] == "production"
+        assert tickets_repo.get_bug_tickets_with_label.call_args.args[1] == "regression"
 
     def test_squad_filter_keeps_only_bugs_whose_culprit_is_theirs(self):
         bug_ours, bug_theirs = _bug("sc-1"), _bug("sc-2")
@@ -217,9 +217,9 @@ class TestIncidentAdaptation:
         fix = _pr(41, title="Fix #40", state_changed_at=T0 + timedelta(hours=6))
         attributor, _ = _attributor([bug], [_link(bug, fix)], [culprit, fix])
         [attribution] = _attribute(attributor)
-        incident = adapt_production_bug_incident(attribution)
+        incident = adapt_regression_incident(attribution)
         assert incident.key == str(culprit.id)
-        assert incident.incident_type == IncidentType.PRODUCTION_BUG
+        assert incident.incident_type == IncidentType.REGRESSION
         assert incident.creation_date == bug.provider_created_at
         assert incident.resolved_date == fix.state_changed_at
         assert incident.status == "resolved"

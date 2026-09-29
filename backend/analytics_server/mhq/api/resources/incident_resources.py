@@ -7,7 +7,7 @@ from mhq.service.incidents.models.mean_time_to_recovery import (
     MeanTimeToRecoveryMetrics,
     ChangeFailureRateMetrics,
 )
-from mhq.service.incidents.production_bugs import ProductionBugAttribution
+from mhq.service.incidents.regressions import RegressionAttribution
 from mhq.store.models.incidents import Incident
 
 
@@ -89,7 +89,7 @@ def _adapt_pr_ref(pr) -> dict:
     }
 
 
-def adapt_production_bug_attribution(attribution: ProductionBugAttribution) -> dict:
+def adapt_regression_attribution(attribution: RegressionAttribution) -> dict:
     ticket = attribution.ticket
     return {
         "ticket_key": ticket.key,

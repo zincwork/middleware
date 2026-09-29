@@ -18,7 +18,9 @@ answer on the run as `meta.shipped`:
      "shas": [...] | None,       # None = unknown, fall back to the time rule
      "truncated": bool}
 
-"behind" (redeploying an older revision, i.e. a rollback) ships no new commits.
+"behind" (redeploying an older revision, i.e. a rollback) ships no new commits,
+and also records `"rolled_back": [{"run_id", "conducted_at", "revision"}, ...]`,
+the deploys it undid. Those count as failed deployments (see rollbacks.py).
 """
 
 from typing import Dict, List, Optional
@@ -36,6 +38,11 @@ from mhq.utils.github import get_custom_github_domain
 from mhq.utils.log import LOG
 
 NO_PREVIOUS_DEPLOY = "no_previous_deploy"
+# GitHub's compare status when the deployed revision is behind the previous
+# deploy's: an older revision went out again, i.e. a rollback.
+ROLLBACK_STATUS = "behind"
+# How far back to look for the deploy of the revision rolled back to
+MAX_ROLLED_BACK_RUNS = 20
 
 
 def get_run_revision(run: RepoWorkflowRuns) -> Optional[str]:
@@ -96,23 +103,36 @@ class DeploymentCommitsSyncHandler:
             )
         )
         to_save: List[RepoWorkflowRuns] = []
-        previous_revision_by_branch: Dict[str, str] = {}
+        # Earlier runs per branch, oldest first, to find what a rollback undid
+        history_by_branch: Dict[str, List[RepoWorkflowRuns]] = {}
 
         try:
             for run in runs:
                 revision = get_run_revision(run)
                 if not revision:
                     continue
-                previous = previous_revision_by_branch.get(run.head_branch)
-                previous_revision_by_branch[run.head_branch] = revision
+                history = history_by_branch.setdefault(run.head_branch, [])
+                previous = get_run_revision(history[-1]) if history else None
 
-                if isinstance((run.meta or {}).get("shipped"), dict):
-                    continue
+                shipped = (run.meta or {}).get("shipped")
+                changed = False
+                if not isinstance(shipped, dict):
+                    shipped = self._get_shipped(org_repo, previous, revision)
+                    changed = True
+                if shipped.get("status") == ROLLBACK_STATUS and (
+                    "rolled_back" not in shipped
+                ):
+                    shipped = {
+                        **shipped,
+                        "rolled_back": get_rolled_back_runs(history, revision),
+                    }
+                    changed = True
+                history.append(run)
 
-                shipped = self._get_shipped(org_repo, previous, revision)
-                # Assign a new dict: in-place JSONB mutation is not tracked
-                run.meta = {**(run.meta or {}), "shipped": shipped}
-                to_save.append(run)
+                if changed:
+                    # Assign a new dict: in-place JSONB mutation is not tracked
+                    run.meta = {**(run.meta or {}), "shipped": shipped}
+                    to_save.append(run)
         finally:
             # Keep what was computed even if a later compare call failed
             if to_save:
@@ -163,6 +183,33 @@ def sync_org_deployment_commits(org_id: str):
     )
     updated = handler.sync()
     LOG.info(f"[Deployment Commits] Mapped commits for {updated} deployment(s)")
+
+
+def get_rolled_back_runs(
+    history: List[RepoWorkflowRuns], rollback_revision: str
+) -> List[dict]:
+    """The deploys a rollback undid, newest first.
+
+    Everything deployed since the last deploy of the revision rolled back to.
+    If that revision was never deployed (rolled back to an arbitrary older
+    commit), only the immediately previous deploy is blamed.
+    """
+    rolled_back: List[RepoWorkflowRuns] = []
+    for earlier in reversed(history[-MAX_ROLLED_BACK_RUNS:]):
+        if get_run_revision(earlier) == rollback_revision:
+            break
+        rolled_back.append(earlier)
+    else:
+        rolled_back = history[-1:]
+
+    return [
+        {
+            "run_id": str(run.id),
+            "conducted_at": run.conducted_at.isoformat(),
+            "revision": get_run_revision(run),
+        }
+        for run in rolled_back
+    ]
 
 
 def get_commit_mapped_deployments(

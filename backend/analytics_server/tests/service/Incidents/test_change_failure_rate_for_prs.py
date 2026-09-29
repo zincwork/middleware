@@ -40,7 +40,7 @@ def _bug_on(pr, hours=0):
     return get_incident(
         id=str(pr.id),
         key=str(pr.id),
-        incident_type=IncidentType.PRODUCTION_BUG,
+        incident_type=IncidentType.REGRESSION,
         creation_date=T0 + timedelta(hours=hours),
         meta={"culprit_pr_id": str(pr.id)},
     )
@@ -160,7 +160,7 @@ def test_weekly_trend_buckets_by_deploy_week():
     assert sum(len(m.total_deployments) for m in weekly.values()) == 2
 
 
-def test_merge_prefers_the_production_bug_over_a_revert_of_the_same_pr():
+def test_merge_prefers_the_regression_over_a_revert_of_the_same_pr():
     culprit = _pr(1)
     revert, bug = _revert_of(culprit), _bug_on(culprit, hours=4)
     merged = IncidentService._merge_incidents([revert], [bug])

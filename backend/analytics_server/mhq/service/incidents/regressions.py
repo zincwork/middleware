@@ -1,9 +1,9 @@
 """
-Shortcut production bugs as incidents, attributed to the PR that caused them.
+Shortcut regressions as incidents, attributed to the PR that caused them.
 
 The chain, all from data Middleware already syncs:
 
-    Shortcut bug labelled `production`           (Ticket, labels)
+    Shortcut bug labelled `regression`           (Ticket, labels)
       -> its fix PR                              (TicketPullRequestMap, via sc-1234)
       -> the culprit PR the fix PR names         (INCIDENT_PRS_SETTING regex, e.g.
                                                   "fixes #123" or "hotfix/123-...")
@@ -11,7 +11,7 @@ The chain, all from data Middleware already syncs:
 The culprit PR is what change failure rate needs: the failed deployment is the
 one that shipped it (see IncidentService.get_change_failure_rate_metrics_for_prs).
 
-Every production bug is reported, attributed or not, with the reason when the
+Every regression is reported, attributed or not, with the reason when the
 chain breaks, so gaps in the team convention are visible rather than silently
 dropped.
 """
@@ -45,7 +45,7 @@ class AttributionStatus:
 
 
 @dataclass
-class ProductionBugAttribution:
+class RegressionAttribution:
     ticket: Ticket
     status: str
     fix_prs: List[PullRequest] = field(default_factory=list)
@@ -68,8 +68,8 @@ def extract_culprit_number(
     return None
 
 
-class ProductionBugAttributor:
-    """Works out, for each production bug, which PR caused it.
+class RegressionAttributor:
+    """Works out, for each regression, which PR caused it.
 
     Repository access is injected so the logic can be tested without a DB:
       tickets_repo.get_bug_tickets_with_label(org_id, label, created_after)
@@ -89,8 +89,8 @@ class ProductionBugAttributor:
         setting: Optional[IncidentPRsSetting],
         created_after: datetime,
         pr_filter: PRFilter = None,
-    ) -> List[ProductionBugAttribution]:
-        label = (setting.production_bug_label if setting else None) or "production"
+    ) -> List[RegressionAttribution]:
+        label = (setting.regression_label if setting else None) or "regression"
         filters = (setting.filters if setting else None) or DEFAULT_CULPRIT_FILTERS
         team_repo_ids = {str(repo_id) for repo_id in team_repo_ids}
 
@@ -131,9 +131,9 @@ class ProductionBugAttributor:
         bug: Ticket,
         fix_prs: List[PullRequest],
         filters: List[IncidentPRFilter],
-    ) -> ProductionBugAttribution:
+    ) -> RegressionAttribution:
         if not fix_prs:
-            return ProductionBugAttribution(bug, AttributionStatus.NO_FIX_PR)
+            return RegressionAttribution(bug, AttributionStatus.NO_FIX_PR)
 
         # Merged fixes first, earliest first: the first real fix is the one
         # that restored service.
@@ -152,7 +152,7 @@ class ProductionBugAttributor:
             named_any = True
             culprit = self._code_repo.get_repo_pr_by_number(str(fix_pr.repo_id), number)
             if culprit and culprit.state == PullRequestState.MERGED:
-                return ProductionBugAttribution(
+                return RegressionAttribution(
                     bug,
                     AttributionStatus.ATTRIBUTED,
                     fix_prs=fix_prs,
@@ -165,11 +165,11 @@ class ProductionBugAttributor:
             if named_any
             else AttributionStatus.NO_CULPRIT_NAMED
         )
-        return ProductionBugAttribution(bug, status, fix_prs=fix_prs, fix_pr=fix_prs[0])
+        return RegressionAttribution(bug, status, fix_prs=fix_prs, fix_pr=fix_prs[0])
 
     def _apply_pr_filter(
-        self, results: List[ProductionBugAttribution], pr_filter: PRFilter
-    ) -> List[ProductionBugAttribution]:
+        self, results: List[RegressionAttribution], pr_filter: PRFilter
+    ) -> List[RegressionAttribution]:
         """With a squad filter, a bug is the squad's only if its culprit is."""
         if not pr_filter:
             return results
@@ -195,8 +195,8 @@ class ProductionBugAttributor:
         return results
 
 
-def adapt_production_bug_incident(attribution: ProductionBugAttribution) -> Incident:
-    """An attributed production bug as an Incident, keyed on its culprit PR.
+def adapt_regression_incident(attribution: RegressionAttribution) -> Incident:
+    """An attributed regression as an Incident, keyed on its culprit PR.
 
     Keying on the culprit (as revert-PR incidents already do) means a bug and a
     revert of the same PR are one failure, not two.
@@ -228,7 +228,7 @@ def adapt_production_bug_incident(attribution: ProductionBugAttribution) -> Inci
         assignees=[fix_pr.author],
         url=bug.url,
         meta={
-            "source": "shortcut_production_bug",
+            "source": "shortcut_regression",
             "ticket_key": bug.key,
             "ticket_url": bug.url,
             "culprit_pr_id": str(culprit.id),
@@ -238,7 +238,7 @@ def adapt_production_bug_incident(attribution: ProductionBugAttribution) -> Inci
             "fix_pr_number": fix_pr.number,
             "fix_pr_url": fix_pr.url,
         },
-        incident_type=IncidentType.PRODUCTION_BUG,
+        incident_type=IncidentType.REGRESSION,
     )
 
 
@@ -249,7 +249,7 @@ def get_incident_culprit_pr_id(incident: Incident) -> Optional[str]:
     meta.original_pr; those built from incident PR filters are keyed on it.
     """
     meta = incident.meta or {}
-    if incident.incident_type == IncidentType.PRODUCTION_BUG:
+    if incident.incident_type == IncidentType.REGRESSION:
         return meta.get("culprit_pr_id")
     if incident.incident_type == IncidentType.REVERT_PR:
         original = meta.get("original_pr") or {}

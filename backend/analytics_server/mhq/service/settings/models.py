@@ -55,9 +55,9 @@ class IncidentPRFilter(TypedDict):
 class IncidentPRsSetting(BaseSetting):
     include_revert_prs: bool
     filters: List[IncidentPRFilter]
-    # Shortcut label that marks a bug as a production failure. The filters
+    # Shortcut label that marks a bug as a regression (a change broke it). The filters
     # above also name the culprit PR in that bug's fix PR.
-    production_bug_label: str = "production"
+    regression_label: str = "regression"
 
 
 # ADD NEW SETTING CLASS HERE

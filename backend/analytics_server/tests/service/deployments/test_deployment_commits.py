@@ -205,3 +205,56 @@ class TestCommitMapping:
             [deploy], {deploy.entity_id: {"shas": ["sha-a"]}}
         )
         assert map_prs_to_commit_mapped_deployments(mapped, [pr_a])[deploy] == []
+
+
+class TestRollbacks:
+    @staticmethod
+    def _behind_when_older(order):
+        """Fake compare: 'behind' when head is older than base in `order`."""
+
+        def compare(org, repo, base, head):
+            if order.index(head) < order.index(base):
+                return GithubCompareResult("behind", [], 0)
+            return GithubCompareResult("ahead", [f"{base}..{head}"], 1)
+
+        return compare
+
+    def test_rolling_back_to_the_previous_revision_undoes_one_deploy(self):
+        runs = [_run("r1", 0), _run("r2", 1), _run("r1", 2)]
+        handler, _, _ = _handler(runs, self._behind_when_older(["r1", "r2"]))
+        handler.sync()
+        rolled_back = runs[2].meta["shipped"]["rolled_back"]
+        assert [r["run_id"] for r in rolled_back] == [str(runs[1].id)]
+        assert rolled_back[0]["revision"] == "r2"
+
+    def test_rolling_back_past_several_deploys_undoes_them_all(self):
+        runs = [_run("r1", 0), _run("r2", 1), _run("r3", 2), _run("r1", 3)]
+        handler, _, _ = _handler(runs, self._behind_when_older(["r1", "r2", "r3"]))
+        handler.sync()
+        assert [r["run_id"] for r in runs[3].meta["shipped"]["rolled_back"]] == [
+            str(runs[2].id),
+            str(runs[1].id),
+        ]
+
+    def test_rolling_back_to_a_never_deployed_revision_blames_the_last_deploy(self):
+        runs = [_run("r1", 0), _run("r2", 1), _run("r0", 2)]
+        handler, _, _ = _handler(runs, self._behind_when_older(["r0", "r1", "r2"]))
+        handler.sync()
+        assert [r["run_id"] for r in runs[2].meta["shipped"]["rolled_back"]] == [
+            str(runs[1].id)
+        ]
+
+    def test_rollbacks_synced_before_this_feature_are_backfilled(self):
+        done = {"base": None, "status": NO_PREVIOUS_DEPLOY, "shas": None}
+        ahead = {"base": "r1", "status": "ahead", "shas": ["x"]}
+        behind_without_list = {"base": "r2", "status": "behind", "shas": []}
+        runs = [
+            _run("r1", 0, shipped=done),
+            _run("r2", 1, shipped=ahead),
+            _run("r1", 2, shipped=behind_without_list),
+        ]
+        handler, github, repo = _handler(runs)
+        assert handler.sync() == 1
+        github.compare_commits.assert_not_called()
+        assert repo.save_repo_workflow_runs.call_args.args[0] == [runs[2]]
+        assert runs[2].meta["shipped"]["rolled_back"][0]["run_id"] == str(runs[1].id)
