@@ -18,6 +18,13 @@ included for each team.
 Input:  zinc_teams.json  (from zinc_dora_discover.py)
 Output: web-server/config/github_teams.json
 
+This script owns only the fields it can derive from GitHub — `members` and
+`branch_prefixes`. Anything else already in the destination file is carried
+across untouched (see PRESERVED_TEAM_KEYS): the Shortcut team mapping written
+by setup_shortcut.py, and the manager set by set_managers.py, neither of which
+exists in GitHub and neither of which could be recovered automatically if this
+script overwrote them.
+
 Usage:
     python3 make_github_teams_config.py \
         --in zinc_teams.json \
@@ -31,6 +38,39 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+
+# Per-team fields this script does NOT own, carried across from whatever is
+# already in the destination file, keyed by slug.
+#
+# This list exists because the script used to open the destination with "w"
+# and never read it, so re-running it after mapping Shortcut silently emptied
+# every mapping. The symptom was an empty ticket view with no error anywhere
+# — the worst kind of failure, because nothing points at the cause.
+PRESERVED_TEAM_KEYS = (
+    "shortcut_team_id",
+    "shortcut_team_name",
+    "manager",
+)
+
+# Top-level keys likewise not ours to regenerate.
+PRESERVED_ROOT_KEYS = ("shortcut_mapped_at", "managers_set_at")
+
+
+def read_existing(path):
+    """Load the destination file, or an empty shape if there is none."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {}, {}
+
+    by_slug = {
+        team["slug"]: team
+        for team in existing.get("teams", [])
+        if isinstance(team, dict) and team.get("slug")
+    }
+    root = {k: existing[k] for k in PRESERVED_ROOT_KEYS if k in existing}
+    return by_slug, root
 
 # Keys are matched against the team slug first, then the lowercased team name,
 # then as a substring of either. Override the whole thing with --prefix-map.
@@ -105,6 +145,8 @@ def main():
         except (OSError, json.JSONDecodeError) as err:
             sys.exit("Could not read {}: {}".format(args.prefix_map, err))
 
+    existing_by_slug, existing_root = read_existing(args.dest)
+
     excluded = {login.lower() for login in args.exclude}
     teams = []
     for team in src.get("teams", []):
@@ -116,15 +158,30 @@ def main():
         )
         if args.skip_empty and not members and not prefixes:
             continue
-        teams.append({
+        entry = {
             "slug": team["slug"],
             "name": team.get("name") or team["slug"],
             "members": sorted(members),
             "branch_prefixes": prefixes,
-        })
+        }
+        # Carry across anything this script does not own.
+        previous = existing_by_slug.get(team["slug"], {})
+        for key in PRESERVED_TEAM_KEYS:
+            if previous.get(key) is not None:
+                entry[key] = previous[key]
+        teams.append(entry)
 
     if not teams:
         sys.exit("No teams to write. Check {} and --skip-empty.".format(args.src))
+
+    # A team that disappears from GitHub takes its mapping with it. Say so
+    # rather than letting the mapping vanish quietly.
+    dropped = sorted(
+        slug
+        for slug, previous in existing_by_slug.items()
+        if slug not in {t["slug"] for t in teams}
+        and any(previous.get(k) for k in PRESERVED_TEAM_KEYS)
+    )
 
     dest_dir = os.path.dirname(os.path.abspath(args.dest))
     if not os.path.isdir(dest_dir):
@@ -135,25 +192,48 @@ def main():
             .format(dest_dir)
         )
 
+    payload = {
+        "org": src.get("org", ""),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": os.path.abspath(args.src),
+        "teams": teams,
+    }
+    payload.update(existing_root)
+
     with open(args.dest, "w", encoding="utf-8") as fh:
-        json.dump({
-            "org": src.get("org", ""),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "source": os.path.abspath(args.src),
-            "teams": teams,
-        }, fh, indent=2)
+        json.dump(payload, fh, indent=2)
         fh.write("\n")
 
     print("Wrote {}".format(args.dest))
     print("")
-    print("  {:<20} {:>8}  {}".format("team", "members", "branch prefixes"))
+    print("  {:<20} {:>8}  {:<24} {}".format(
+        "team", "members", "branch prefixes", "kept"))
     for team in teams:
-        print("  {:<20} {:>8}  {}".format(
+        kept = [k.replace("shortcut_team_id", "shortcut")
+                 .replace("shortcut_team_name", "")
+                for k in PRESERVED_TEAM_KEYS if team.get(k)]
+        print("  {:<20} {:>8}  {:<24} {}".format(
             team["slug"], len(team["members"]),
-            ", ".join(team["branch_prefixes"]) or "(none — branch attribution "
-                                                 "will return nothing)",
+            ", ".join(team["branch_prefixes"]) or "(none)",
+            ", ".join(k for k in kept if k) or "-",
         ))
     print("")
+
+    preserved_count = sum(
+        1 for t in teams if any(t.get(k) for k in PRESERVED_TEAM_KEYS)
+    )
+    if preserved_count:
+        print("Carried across settings on {} team(s) that are not derived "
+              "from GitHub.".format(preserved_count))
+        print("")
+
+    if dropped:
+        print("These teams had a Shortcut mapping or a manager set, but no")
+        print("longer exist in GitHub, so their settings have been dropped:")
+        for slug in dropped:
+            print("  {}".format(slug))
+        print("Re-map with setup_shortcut.py if they were renamed.")
+        print("")
 
     no_prefix = [t["slug"] for t in teams if not t["branch_prefixes"]]
     if no_prefix:
