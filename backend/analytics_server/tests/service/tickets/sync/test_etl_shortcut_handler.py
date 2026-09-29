@@ -10,6 +10,7 @@ all, and branch and pull-request events arriving in separate entries.
 
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
+from uuid import UUID
 
 from mhq.exapi.models.shortcut import (
     ShortcutHistoryEntry,
@@ -257,6 +258,13 @@ class TestTransitions:
             ("In Progress", "Review Requested"),
             ("Review Requested", "Done"),
         ]
+
+    def test_ids_are_uuid_objects_not_strings(self):
+        # String ids made SQLAlchemy 2.0's batched insert fail with "Can't
+        # match sentinel values", which aborted the whole Shortcut sync.
+        transitions = _handler()._adapt_transitions("t1", REAL_HISTORY)
+        assert all(isinstance(t.id, UUID) for t in transitions)
+        assert len({t.id for t in transitions}) == len(transitions)
 
     def test_state_types_come_through(self):
         transitions = _handler()._adapt_transitions("t1", REAL_HISTORY)
