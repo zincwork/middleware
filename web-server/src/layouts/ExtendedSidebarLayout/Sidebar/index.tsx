@@ -5,7 +5,8 @@ import {
   styled,
   Divider,
   useTheme,
-  lighten
+  lighten,
+  Link
 } from '@mui/material';
 import { format, isValid } from 'date-fns';
 import { useContext, useMemo } from 'react';
@@ -86,10 +87,14 @@ const SidebarContent = () => {
         <SidebarMenu />
       </Scrollbar>
       <Divider sx={{ background: theme.colors.alpha.trueWhite[10] }} />
-      <FlexBox justifyCenter alignCenter height="60px">
+      <FlexBox col justifyCenter alignCenter height="60px">
         <Line small medium secondary>
           Build: {formattedDate}
         </Line>
+        {/* Plain anchor: next-auth routes need a full page load */}
+        <Link href="/api/auth/signout" variant="caption" color="secondary">
+          Sign out
+        </Link>
       </FlexBox>
     </>
   );
