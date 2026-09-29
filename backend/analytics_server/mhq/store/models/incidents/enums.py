@@ -29,6 +29,8 @@ class IncidentStatus(Enum):
 class IncidentType(Enum):
     INCIDENT = "INCIDENT"
     REVERT_PR = "REVERT_PR"
+    # A Shortcut bug labelled as a production failure (see production_bugs.py)
+    PRODUCTION_BUG = "PRODUCTION_BUG"
     ALERT = "ALERT"
 
 

@@ -1,4 +1,5 @@
 from mhq.service.code import sync_code_repos
+from mhq.service.deployments.deployment_commits import sync_org_deployment_commits
 from mhq.service.incidents import sync_org_incidents
 from mhq.service.merge_to_deploy_broker import process_merge_to_deploy_cache
 from mhq.service.tickets import sync_org_tickets
@@ -8,6 +9,9 @@ from mhq.utils.log import LOG
 sync_sequence = [
     sync_code_repos,
     sync_org_workflows,
+    # After workflows (needs the new deploy runs) and code (needs PR merge
+    # commits): records which commits each deploy shipped.
+    sync_org_deployment_commits,
     process_merge_to_deploy_cache,
     sync_org_incidents,
     # Last, and after the code sync, so ticket-to-pull-request links resolve

@@ -43,3 +43,17 @@ class GitHubContributor(GitHubBaseUser):
         if isinstance(other, GitHubContributor):
             return self.id == other.id
         return False
+
+
+@dataclass
+class GithubCompareResult:
+    """Commits reachable from `head` but not from `base`, as GitHub reports them.
+
+    `status` is GitHub's: "ahead", "behind", "identical" or "diverged".
+    `truncated` is set when more commits exist than were fetched.
+    """
+
+    status: str
+    commit_shas: list
+    total_commits: int
+    truncated: bool = False

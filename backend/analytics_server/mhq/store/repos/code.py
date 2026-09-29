@@ -210,12 +210,13 @@ class CodeRepoService:
         return pr_events
 
     @rollback_on_exc
-    def get_prs_by_ids(self, pr_ids: List[str]):
+    def get_prs_by_ids(self, pr_ids: List[str], pr_filter: PRFilter = None):
         query = (
             self._db.session.query(PullRequest)
             .options(defer(PullRequest.data))
             .filter(PullRequest.id.in_(pr_ids))
         )
+        query = self._filter_prs(query, pr_filter)
         return query.all()
 
     @rollback_on_exc
@@ -306,6 +307,22 @@ class CodeRepoService:
         query = query.order_by(PullRequest.state_changed_at.asc())
 
         return query.all()
+
+    @rollback_on_exc
+    def get_merged_prs_by_merge_commit_shas(
+        self, repo_ids: List[str], shas: List[str], pr_filter: PRFilter = None
+    ) -> List[PullRequest]:
+        """Merged PRs whose merge commit is one of `shas`, in any time window."""
+        if not repo_ids or not shas:
+            return []
+        query = self._db.session.query(PullRequest).options(defer(PullRequest.data))
+        query = self._filter_prs_by_repo_ids(query, repo_ids)
+        query = query.filter(
+            PullRequest.state == PullRequestState.MERGED,
+            PullRequest.merge_commit_sha.in_(shas),
+        )
+        query = self._filter_prs(query, pr_filter)
+        return query.order_by(PullRequest.state_changed_at.asc()).all()
 
     @rollback_on_exc
     def get_prs_merged_in_interval_by_numbers(

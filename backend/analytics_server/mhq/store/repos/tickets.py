@@ -10,6 +10,7 @@ from mhq.store.models.tickets import (
     TicketPullRequestMap,
     TicketStateTransition,
     TicketsBookmark,
+    TicketType,
 )
 from mhq.utils.string import uuid4_str
 from mhq.utils.time import time_now
@@ -88,6 +89,43 @@ class TicketsRepoService:
             # to stop a ten-subtask story counting eleven times.
             query = query.filter(Ticket.is_subtask.is_(False))
         return query.all()
+
+    @rollback_on_exc
+    def get_bug_tickets_with_label(
+        self, org_id: str, label: str, created_after: datetime
+    ) -> List[Ticket]:
+        """Top-level bugs carrying `label` (case-insensitive), raised since
+        `created_after`. Labels are matched in Python: bugs are a small set, and
+        Shortcut label casing is not consistent ("Quality" vs "quality")."""
+        wanted = label.strip().lower()
+        bugs = (
+            self._db.session.query(Ticket)
+            .filter(
+                Ticket.org_id == org_id,
+                Ticket.ticket_type == TicketType.BUG.value,
+                Ticket.is_subtask.is_(False),
+                Ticket.provider_created_at >= created_after,
+            )
+            .order_by(Ticket.provider_created_at.asc())
+            .all()
+        )
+        return [
+            bug
+            for bug in bugs
+            if any((lbl or "").strip().lower() == wanted for lbl in bug.labels or [])
+        ]
+
+    @rollback_on_exc
+    def get_pull_request_links_for_tickets(
+        self, ticket_ids: List[str]
+    ) -> List[TicketPullRequestMap]:
+        if not ticket_ids:
+            return []
+        return (
+            self._db.session.query(TicketPullRequestMap)
+            .filter(TicketPullRequestMap.ticket_id.in_(ticket_ids))
+            .all()
+        )
 
     # ------------------------------------------------------------------
     # State transitions

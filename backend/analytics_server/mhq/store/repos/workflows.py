@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from sqlalchemy.orm import defer
 from sqlalchemy import and_
@@ -229,6 +229,41 @@ class WorkflowRepoService:
         query = query.order_by(RepoWorkflowRuns.conducted_at)
 
         return query.limit(limit_value).all()
+
+    @rollback_on_exc
+    def get_successful_runs_with_meta_for_repo_workflow(
+        self, repo_workflow_id: str
+    ) -> List[RepoWorkflowRuns]:
+        """Successful runs of one workflow, oldest first, with meta loaded."""
+        return (
+            self._db.session.query(RepoWorkflowRuns)
+            .filter(
+                RepoWorkflowRuns.repo_workflow_id == repo_workflow_id,
+                RepoWorkflowRuns.status == RepoWorkflowRunsStatus.SUCCESS,
+            )
+            .order_by(RepoWorkflowRuns.conducted_at.asc())
+            .all()
+        )
+
+    @rollback_on_exc
+    def get_shipped_commits_by_run_ids(self, run_ids: List[str]) -> Dict[str, dict]:
+        """meta["shipped"] for each run that has it, keyed by run id.
+
+        One query for all runs, because the deployment queries defer meta and
+        reading it per deployment would issue a query each.
+        """
+        if not run_ids:
+            return {}
+        rows = (
+            self._db.session.query(RepoWorkflowRuns.id, RepoWorkflowRuns.meta)
+            .filter(RepoWorkflowRuns.id.in_(run_ids))
+            .all()
+        )
+        return {
+            str(run_id): meta["shipped"]
+            for run_id, meta in rows
+            if meta and isinstance(meta.get("shipped"), dict)
+        }
 
     def _filter_active_repo_workflows(self, query):
         return query.filter(

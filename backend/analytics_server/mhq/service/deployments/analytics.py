@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 
 from mhq.utils.dict import (
     get_average_of_dict_values,
@@ -12,13 +12,19 @@ from mhq.store.models.code.filter import PRFilter
 from mhq.store.models.code.pull_requests import PullRequest
 from mhq.store.models.code.repository import TeamRepos
 from mhq.store.models.code.workflows.filter import WorkflowFilter
+from mhq.service.deployments.deployment_commits import (
+    get_commit_mapped_deployments,
+    map_prs_to_commit_mapped_deployments,
+)
 from mhq.service.deployments.models.models import (
     Deployment,
     DeploymentFrequencyMetrics,
     DeploymentStatus,
+    DeploymentType,
 )
 
 from mhq.store.repos.code import CodeRepoService
+from mhq.store.repos.workflows import WorkflowRepoService
 from mhq.utils.time import Interval, generate_expanded_buckets
 
 
@@ -27,9 +33,13 @@ class DeploymentAnalyticsService:
         self,
         deployments_service: DeploymentsService,
         code_repo_service: CodeRepoService,
+        workflow_repo_service: Optional[WorkflowRepoService] = None,
     ):
         self.deployments_service = deployments_service
         self.code_repo_service = code_repo_service
+        # Optional so unit tests can omit it; without it every deployment
+        # falls back to the time-based PR mapping.
+        self.workflow_repo_service = workflow_repo_service
 
     def get_team_all_deployments_in_interval_with_related_prs(
         self,
@@ -53,11 +63,37 @@ class DeploymentAnalyticsService:
         team_repos: List[TeamRepos] = self._get_team_repos_by_team_id(team_id)
         repo_ids: List[str] = [str(team_repo.org_repo_id) for team_repo in team_repos]
 
-        pull_requests: List[PullRequest] = (
-            self.code_repo_service.get_prs_merged_in_interval(
+        repo_id_to_deployments_with_pr_map: Dict[
+            str, Dict[Deployment, List[PullRequest]]
+        ] = defaultdict(dict)
+
+        # Deployments whose shipped commits are known are mapped exactly, by
+        # merge commit (see deployment_commits.py). PRs are loaded by SHA, not
+        # by merge date, because a deploy early in the interval can ship PRs
+        # merged before it started.
+        commit_mapped = self._get_commit_mapped_deployments(deployments)
+        assigned_pr_ids = set()
+        if commit_mapped:
+            shas = list(set().union(*commit_mapped.values()))
+            commit_prs = self.code_repo_service.get_merged_prs_by_merge_commit_shas(
+                repo_ids, shas, pr_filter
+            )
+            for deployment, prs in map_prs_to_commit_mapped_deployments(
+                commit_mapped, commit_prs
+            ).items():
+                repo_id_to_deployments_with_pr_map[str(deployment.repo_id)][
+                    deployment
+                ] = prs
+                assigned_pr_ids.update(str(pr.id) for pr in prs)
+            deployments = [d for d in deployments if d not in commit_mapped]
+
+        pull_requests: List[PullRequest] = [
+            pr
+            for pr in self.code_repo_service.get_prs_merged_in_interval(
                 repo_ids, interval, pr_filter
             )
-        )
+            if str(pr.id) not in assigned_pr_ids
+        ]
 
         repo_id_branch_to_pr_list_map: Dict[Tuple[str, str], List[PullRequest]] = (
             self._map_prs_to_repo_id_and_base_branch(pull_requests)
@@ -65,10 +101,6 @@ class DeploymentAnalyticsService:
         repo_id_branch_to_deployments_map: Dict[Tuple[str, str], List[Deployment]] = (
             self._map_deployments_to_repo_id_and_head_branch(deployments)
         )
-
-        repo_id_to_deployments_with_pr_map: Dict[
-            str, Dict[Deployment, List[PullRequest]]
-        ] = defaultdict(dict)
 
         for (
             repo_id,
@@ -163,6 +195,25 @@ class DeploymentAnalyticsService:
             for deployment, prs in deployments_with_prs.items()
             if prs and deployment.status == DeploymentStatus.SUCCESS
         ]
+
+    def _get_commit_mapped_deployments(
+        self, deployments: List[Deployment]
+    ) -> Dict[Deployment, set]:
+        if not self.workflow_repo_service:
+            return {}
+        run_ids = [
+            str(d.entity_id)
+            for d in deployments
+            if d.deployment_type == DeploymentType.WORKFLOW
+        ]
+        shipped_by_run_id = self.workflow_repo_service.get_shipped_commits_by_run_ids(
+            run_ids
+        )
+        return get_commit_mapped_deployments(deployments, shipped_by_run_id)
+
+    @staticmethod
+    def is_pr_attributed(pr_filter: PRFilter) -> bool:
+        return DeploymentAnalyticsService._is_pr_attributed(pr_filter)
 
     @staticmethod
     def _is_pr_attributed(pr_filter: PRFilter) -> bool:
@@ -321,4 +372,6 @@ class DeploymentAnalyticsService:
 
 
 def get_deployment_analytics_service() -> DeploymentAnalyticsService:
-    return DeploymentAnalyticsService(get_deployments_service(), CodeRepoService())
+    return DeploymentAnalyticsService(
+        get_deployments_service(), CodeRepoService(), WorkflowRepoService()
+    )

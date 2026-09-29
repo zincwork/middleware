@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Optional as typeOptional
+from typing import Dict, List, Optional as typeOptional, Tuple
 
 from datetime import datetime
 
@@ -9,10 +9,12 @@ from mhq.service.code.pr_filter import apply_pr_filter
 from mhq.store.models.code.filter import PRFilter
 from mhq.store.models.settings import SettingType, EntityType
 from mhq.service.incidents.models.mean_time_to_recovery import ChangeFailureRateMetrics
-from mhq.service.deployments.deployment_service import (
-    get_deployments_service,
+from mhq.service.deployments.analytics import (
+    DeploymentAnalyticsService,
+    get_deployment_analytics_service,
 )
 from mhq.service.deployments.models.models import Deployment
+from mhq.store.models.code.pull_requests import PullRequest
 from mhq.store.models.code.workflows.filter import WorkflowFilter
 from mhq.utils.time import Interval
 from mhq.service.incidents.incidents import get_incident_service
@@ -21,6 +23,7 @@ from mhq.api.resources.incident_resources import (
     adapt_deployments_with_related_incidents,
     adapt_incident,
     adapt_mean_time_to_recovery_metrics,
+    adapt_production_bug_attribution,
 )
 from mhq.store.models.incidents import Incident
 from mhq.api.request_utils import coerce_workflow_filter, queryschema
@@ -92,20 +95,15 @@ def get_deployments_with_related_incidents(
         pr_filter, EntityType.TEAM, team_id, [SettingType.EXCLUDED_PRS_SETTING]
     )
 
-    deployments: List[
-        Deployment
-    ] = get_deployments_service().get_team_all_deployments_in_interval(
+    incident_service = get_incident_service()
+    deployments, deployments_with_prs, incidents, is_pr_attributed = _get_cfr_inputs(
         team_id, interval, pr_filter, workflow_filter
     )
 
-    incident_service = get_incident_service()
-
-    incidents: List[Incident] = incident_service.get_team_incidents(
-        team_id, interval, pr_filter
-    )
-
     deployment_incidents_map: Dict[Deployment, List[Incident]] = (
-        incident_service.get_deployment_incidents_map(deployments, incidents)
+        incident_service.get_deployment_incidents_map_for_prs(
+            deployments, deployments_with_prs, incidents, is_pr_attributed
+        )
     )
 
     return list(
@@ -113,7 +111,7 @@ def get_deployments_with_related_incidents(
             lambda deployment: adapt_deployments_with_related_incidents(
                 deployment, deployment_incidents_map
             ),
-            deployments,
+            [d for d in deployments if d in deployment_incidents_map],
         )
     )
 
@@ -218,20 +216,15 @@ def get_team_cfr(
         pr_filter, EntityType.TEAM, team_id, [SettingType.EXCLUDED_PRS_SETTING]
     )
 
-    deployments: List[
-        Deployment
-    ] = get_deployments_service().get_team_all_deployments_in_interval(
+    incident_service = get_incident_service()
+    deployments, deployments_with_prs, incidents, is_pr_attributed = _get_cfr_inputs(
         team_id, interval, pr_filter, workflow_filter
     )
 
-    incident_service = get_incident_service()
-
-    incidents: List[Incident] = incident_service.get_team_incidents(
-        team_id, interval, pr_filter
-    )
-
     team_change_failure_rate: ChangeFailureRateMetrics = (
-        incident_service.get_change_failure_rate_metrics(deployments, incidents)
+        incident_service.get_change_failure_rate_metrics_for_prs(
+            deployments, deployments_with_prs, incidents, is_pr_attributed
+        )
     )
 
     return adapt_change_failure_rate(team_change_failure_rate)
@@ -264,21 +257,14 @@ def get_team_cfr_trends(
         pr_filter, EntityType.TEAM, team_id, [SettingType.EXCLUDED_PRS_SETTING]
     )
 
-    deployments: List[
-        Deployment
-    ] = get_deployments_service().get_team_all_deployments_in_interval(
+    incident_service = get_incident_service()
+    deployments, deployments_with_prs, incidents, is_pr_attributed = _get_cfr_inputs(
         team_id, interval, pr_filter, workflow_filter
     )
 
-    incident_service = get_incident_service()
-
-    incidents: List[Incident] = incident_service.get_team_incidents(
-        team_id, interval, pr_filter
-    )
-
     team_weekly_change_failure_rate: Dict[datetime, ChangeFailureRateMetrics] = (
-        incident_service.get_weekly_change_failure_rate(
-            interval, deployments, incidents
+        incident_service.get_weekly_change_failure_rate_for_prs(
+            interval, deployments, deployments_with_prs, incidents, is_pr_attributed
         )
     )
 
@@ -286,3 +272,70 @@ def get_team_cfr_trends(
         week.isoformat(): adapt_change_failure_rate(change_failure_rate)
         for week, change_failure_rate in team_weekly_change_failure_rate.items()
     }
+
+
+def _get_cfr_inputs(
+    team_id: str,
+    interval: Interval,
+    pr_filter: PRFilter,
+    workflow_filter: WorkflowFilter,
+) -> Tuple[List[Deployment], Dict[Deployment, List[PullRequest]], List[Incident], bool]:
+    """Deployments with the PRs each shipped, plus the team's incidents.
+
+    Shared by the CFR figure, its trend and the drill-down so all three count
+    the same deployments and blame the same ones.
+    """
+    analytics_service = get_deployment_analytics_service()
+    repo_to_deployments_with_prs = (
+        analytics_service.get_team_all_deployments_in_interval_with_related_prs(
+            team_id, interval, pr_filter, workflow_filter
+        )
+    )
+    deployments_with_prs: Dict[Deployment, List[PullRequest]] = {
+        deployment: prs
+        for deployments_prs in repo_to_deployments_with_prs.values()
+        for deployment, prs in deployments_prs.items()
+    }
+    deployments = sorted(deployments_with_prs.keys(), key=lambda d: d.conducted_at)
+    incidents: List[Incident] = get_incident_service().get_team_incidents(
+        team_id, interval, pr_filter
+    )
+    return (
+        deployments,
+        deployments_with_prs,
+        incidents,
+        DeploymentAnalyticsService.is_pr_attributed(pr_filter),
+    )
+
+
+@app.route("/teams/<team_id>/production_bugs", methods=["GET"])
+@queryschema(
+    Schema(
+        {
+            Required("from_time"): All(str, Coerce(datetime.fromisoformat)),
+            Required("to_time"): All(str, Coerce(datetime.fromisoformat)),
+            Optional("pr_filter"): All(str, Coerce(json.loads)),
+        }
+    ),
+)
+def get_team_production_bugs(
+    team_id: str,
+    from_time: datetime,
+    to_time: datetime,
+    pr_filter: typeOptional[Dict] = None,
+):
+    """Every production-labelled bug raised in the window, and how (or why
+    not) it was tied to a culprit PR. Bugs that could not be attributed are
+    excluded from CFR, so this is where to see gaps in the team convention."""
+    query_validator = get_query_validator()
+    interval = query_validator.interval_validator(from_time, to_time)
+    query_validator.team_validator(team_id)
+
+    pr_filter: PRFilter = apply_pr_filter(
+        pr_filter, EntityType.TEAM, team_id, [SettingType.EXCLUDED_PRS_SETTING]
+    )
+
+    attributions = get_incident_service().get_team_production_bug_attributions(
+        team_id, interval, pr_filter
+    )
+    return [adapt_production_bug_attribution(a) for a in attributions]
