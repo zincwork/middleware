@@ -16,6 +16,7 @@ Auth is a CircleCI personal API token in the `Circle-Token` header.
 Docs: https://circleci.com/docs/api/v2/
 """
 
+import re
 import time
 from datetime import datetime
 from http import HTTPStatus
@@ -39,17 +40,28 @@ RETRY_BACKOFF_SECONDS = 5
 # through the project's entire history.
 MAX_PIPELINE_PAGES = 50
 
+# The fractional-seconds part of an ISO timestamp, e.g. ".45" in "15.45+00:00"
+_FRACTIONAL_SECONDS = re.compile(r"\.(\d+)(?=[+-]\d{2}:\d{2}$|$)")
+
 
 def parse_circle_ci_datetime(value: Optional[str]) -> Optional[datetime]:
     """Parse a CircleCI timestamp.
 
     CircleCI returns fractional seconds ("2026-09-04T10:15:32.123Z") where
     GitHub does not, so Middleware's ISO_8601_DATE_FORMAT cannot be reused.
+
+    It also trims trailing zeros (".450" arrives as ".45"), and Python 3.9's
+    fromisoformat only accepts exactly 3 or 6 fractional digits. So normalise
+    the fraction to 6 digits first; otherwise those jobs lose their start or
+    stop time and are silently dropped as deployments.
     """
     if not value:
         return None
+    normalised = _FRACTIONAL_SECONDS.sub(
+        lambda m: "." + m.group(1)[:6].ljust(6, "0"), value.replace("Z", "+00:00")
+    )
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(normalised)
     except ValueError:
         LOG.warning(f"[CircleCI] Could not parse timestamp: {value}")
         return None
