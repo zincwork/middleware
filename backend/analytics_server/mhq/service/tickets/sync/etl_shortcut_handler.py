@@ -21,6 +21,7 @@ Three things are worth knowing about the parsing:
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from mhq.exapi.models.shortcut import (
     ShortcutGitLink,
@@ -196,7 +197,11 @@ class ShortcutETLHandler(TicketProviderETLHandler):
 
                 transitions.append(
                     TicketStateTransition(
-                        id=uuid4_str(),
+                        # A UUID object, not a string: these rows are inserted
+                        # in one batch, and SQLAlchemy 2.0 matches the UUIDs
+                        # Postgres returns against the ids passed in. String
+                        # ids never match, so the whole insert fails.
+                        id=uuid4(),
                         ticket_id=ticket_id,
                         from_state=from_state[0],
                         from_state_type=from_state[1],
