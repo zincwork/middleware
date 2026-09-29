@@ -85,6 +85,27 @@ class TestTimestampParsing:
         parsed = parse_circle_ci_datetime("2026-09-04T10:15:32.123Z")
         assert parsed == datetime(2026, 9, 4, 10, 15, 32, 123000, tzinfo=pytz.UTC)
 
+    def test_parses_trimmed_fractional_seconds(self):
+        # CircleCI drops trailing zeros (".450" -> ".45"), which Python 3.9's
+        # fromisoformat rejects. Real values seen from the mvp-api/mvp-app sync.
+        assert parse_circle_ci_datetime("2026-09-29T08:20:15.5Z") == datetime(
+            2026, 9, 29, 8, 20, 15, 500000, tzinfo=pytz.UTC
+        )
+        assert parse_circle_ci_datetime("2026-06-02T11:07:56.45Z") == datetime(
+            2026, 6, 2, 11, 7, 56, 450000, tzinfo=pytz.UTC
+        )
+        assert parse_circle_ci_datetime("2026-06-02T11:07:56.4501Z") == datetime(
+            2026, 6, 2, 11, 7, 56, 450100, tzinfo=pytz.UTC
+        )
+
+    def test_truncates_beyond_microseconds(self):
+        parsed = parse_circle_ci_datetime("2026-09-04T10:15:32.1234567Z")
+        assert parsed == datetime(2026, 9, 4, 10, 15, 32, 123456, tzinfo=pytz.UTC)
+
+    def test_parses_explicit_offset(self):
+        parsed = parse_circle_ci_datetime("2026-09-04T10:15:32.12+00:00")
+        assert parsed == datetime(2026, 9, 4, 10, 15, 32, 120000, tzinfo=pytz.UTC)
+
     def test_parses_whole_seconds(self):
         parsed = parse_circle_ci_datetime("2026-09-04T10:15:32Z")
         assert parsed == datetime(2026, 9, 4, 10, 15, 32, tzinfo=pytz.UTC)
