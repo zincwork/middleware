@@ -60,6 +60,9 @@ export const ROUTES = {
   WELCOME: new RoutePath('WELCOME'),
   SERVER_ADMIN: new RoutePath('SERVER_ADMIN'),
   DORA_METRICS: new RoutePath('DORA_METRICS'),
+  CHANGE_FAILURE_RATE_GUIDE: new RoutePath('DORA_METRICS').chain(
+    'CHANGE_FAILURE_RATE'
+  ),
   COCKPIT: new RoutePath('COCKPIT'),
   get TEAMS() {
     const route = new RoutePath('TEAMS');

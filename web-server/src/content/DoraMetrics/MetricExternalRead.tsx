@@ -11,16 +11,20 @@ export const MetricExternalRead: FC<
   {
     label: string;
     link: string;
+    /** Replaces "Read more about {label}" */
+    linkText?: string;
     iconProps?: ComponentProps<typeof HelpOutlineRounded>;
   } & FlexBoxProps
-> = ({ label, link, children, iconProps, ...props }) => {
+> = ({ label, link, linkText, children, iconProps, ...props }) => {
+  // In-app pages (e.g. our own methodology page) open in place, not a new tab
+  const isInternal = link.startsWith('/');
   return (
     <>
       <FlexBox
         color="white"
         title={
           <FlexBox col gap={1 / 2}>
-            <Link href={link} {...OPEN_IN_NEW_TAB_PROPS}>
+            <Link href={link} {...(isInternal ? {} : OPEN_IN_NEW_TAB_PROPS)}>
               <Line
                 tiny
                 sx={{
@@ -35,7 +39,8 @@ export const MetricExternalRead: FC<
                 medium
                 white
               >
-                Read more about {label} <GoLinkExternal />
+                {linkText || `Read more about ${label}`}{' '}
+                {!isInternal && <GoLinkExternal />}
               </Line>
             </Link>
           </FlexBox>
