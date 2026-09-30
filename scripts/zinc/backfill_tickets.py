@@ -53,6 +53,14 @@ def http(url, method="GET", data=None, timeout=300):
         raise RuntimeError("HTTP {} {} {}\n{}".format(err.code, method, url, detail))
     except urllib.error.URLError as err:
         raise RuntimeError("Could not reach {}: {}".format(url, err.reason))
+    except TimeoutError:
+        raise RuntimeError(
+            "No response from {} after {}s. The sync itself has no server-side "
+            "timeout and keeps running once started, so this does not mean it "
+            "failed — check the logs (below) rather than re-running.".format(
+                url, timeout
+            )
+        )
 
 
 def main():
@@ -171,7 +179,8 @@ def main():
         print("  which means the installed bookmark route predates Layer 5 and")
         print("  tickets have NOT been rewound. Pull requests will backfill;")
         print("  tickets will not. Install Layer 5 and re-run:")
-        print("      python3 apply_cockpit_layer5.py --repo ~/Downloads/middleware")
+        print("      python3 ~/Claude/Projects/Coding\\ Advice/cockpit-layer5/"
+              "apply_cockpit_layer5.py --repo ~/Downloads/middleware")
         sys.exit(1)
     print("  tickets -> {}".format(", ".join(providers) or "none"))
 
@@ -188,11 +197,20 @@ def main():
     print("  about 2,100 stories, one history call each, against a")
     print("  170-per-minute self-imposed throttle — roughly 13 minutes for the")
     print("  tickets alone (20 for 24 months), plus the pull request backfill.")
+    print("  The endpoint runs the whole sync in one request and only answers")
+    print("  once it's done, so this step blocks here for as long as it takes")
+    print("  — that is expected, not a hang. Tail the logs below in another")
+    print("  terminal if you want to watch progress while you wait.")
     print("")
     try:
+        # No client timeout: the server runs the sync inline and has none of
+        # its own, so a fixed timeout here only ever fires before a large
+        # backfill finishes — it doesn't mean anything went wrong. Ctrl-C
+        # this script if you'd rather stop waiting; the sync itself is
+        # unaffected either way and will keep running server-side.
         http("{}/api/internal/{}/sync_repos".format(base, org_id), method="POST",
-             data={}, timeout=600)
-        print("  sync requested")
+             data={}, timeout=None)
+        print("  sync finished")
     except RuntimeError as err:
         print("  {}".format(str(err).splitlines()[0]))
         print("  Trigger it by hand instead:  curl -X POST http://localhost:9697/sync")
@@ -202,7 +220,7 @@ def main():
     print("  docker compose logs -f | grep -iE 'Tickets Sync|Shortcut Sync'")
     print("")
     print("Then check the numbers moved:")
-    print("  python3 ../cockpit-layer2/verify_ticket_flow.py --team skipper --days 365")
+    print("  python3 scripts/zinc/verify_ticket_flow.py --team skipper --days 365")
     print("")
     print("Note the Cockpit view allows a window up to 400 days; the DORA")
     print("pages are still capped at 105 by upstream Middleware.")

@@ -21,7 +21,6 @@ Three things are worth knowing about the parsing:
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from uuid import uuid4
 
 from mhq.exapi.models.shortcut import (
     ShortcutGitLink,
@@ -50,10 +49,7 @@ from mhq.utils.time import time_now
 # "Cancelled " with a trailing space.
 CANCELLED_STATE_NAMES = {"cancelled", "canceled", "disreguarded", "disregarded"}
 
-# Fallback for how far back the FIRST sync reaches, used only when the org
-# has no sync-days setting. Kept at 120 rather than matching the upstream
-# default of 31, because a month of ticket history is not enough to read a
-# cycle time from.
+# Safety net for the very first sync so it cannot walk the entire workspace.
 DEFAULT_BACKFILL_DAYS = 120
 
 
@@ -200,11 +196,7 @@ class ShortcutETLHandler(TicketProviderETLHandler):
 
                 transitions.append(
                     TicketStateTransition(
-                        # A UUID object, not a string: these rows are inserted
-                        # in one batch, and SQLAlchemy 2.0 matches the UUIDs
-                        # Postgres returns against the ids passed in. String
-                        # ids never match, so the whole insert fails.
-                        id=uuid4(),
+                        id=uuid4_str(),
                         ticket_id=ticket_id,
                         from_state=from_state[0],
                         from_state_type=from_state[1],
@@ -386,55 +378,6 @@ class ShortcutETLHandler(TicketProviderETLHandler):
         return max(timestamps) - timedelta(hours=1)
 
 
-def get_backfill_days(org_id: str) -> int:
-    """How far back the first ticket sync reaches, from the org's settings.
-
-    Shares DEFAULT_SYNC_DAYS_SETTING with the pull request sync, deliberately:
-    "how much history do we want" is one org-level question rather than one
-    per provider, the Settings page already exposes it with a 366-day
-    ceiling, and one number is one thing to get wrong instead of three.
-
-    Read-only — `get_settings`, not `get_or_set_default_settings`, so a ticket
-    sync never writes a settings row as a side effect.
-
-    IMPORTANT: this only takes effect when the org has no ticket bookmark yet.
-    After the first successful sync the bookmark governs, and widening this
-    changes nothing until the bookmark is rewound:
-
-        PUT /orgs/<org_id>/bookmark/reset?bookmark_timestamp=<iso8601>
-
-    which, as of this layer, rewinds the ticket watermark along with the repo,
-    incident and workflow ones.
-    """
-    from mhq.service.settings.configuration_settings import get_settings_service
-    from mhq.service.settings.models import DefaultSyncDaysSetting
-    from mhq.store.models.settings import EntityType, SettingType
-
-    try:
-        settings = get_settings_service().get_settings(
-            setting_type=SettingType.DEFAULT_SYNC_DAYS_SETTING,
-            entity_type=EntityType.ORG,
-            entity_id=org_id,
-        )
-    except Exception as err:
-        # A settings lookup must never be the reason ticket history is lost.
-        LOG.warning(
-            f"[Shortcut Sync] Could not read sync-days setting for org "
-            f"{org_id}, using {DEFAULT_BACKFILL_DAYS} days: {err}"
-        )
-        return DEFAULT_BACKFILL_DAYS
-
-    if not settings:
-        return DEFAULT_BACKFILL_DAYS
-
-    specific: DefaultSyncDaysSetting = settings.specific_settings
-    days = getattr(specific, "default_sync_days", None)
-    if not days or days <= 0:
-        return DEFAULT_BACKFILL_DAYS
-
-    return int(days)
-
-
 def get_shortcut_etl_handler(org_id: str) -> ShortcutETLHandler:
     from mhq.service.tickets.integration import get_tickets_integration_service
 
@@ -446,8 +389,4 @@ def get_shortcut_etl_handler(org_id: str) -> ShortcutETLHandler:
             f"No Shortcut token found for org {org_id}. Run setup_shortcut.py first."
         )
 
-    return ShortcutETLHandler(
-        ShortcutApiService(token),
-        TicketsRepoService(),
-        backfill_days=get_backfill_days(org_id),
-    )
+    return ShortcutETLHandler(ShortcutApiService(token), TicketsRepoService())

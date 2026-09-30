@@ -25,19 +25,6 @@ from mhq.service.tickets.ticket_filter import apply_ticket_filter
 
 app = Blueprint("tickets", __name__)
 
-# The shared interval validator caps requests at 105 days, which is fine for
-# the DORA pages but defeats the point of backfilling a year of tickets: the
-# data would be there and unviewable. 400 sits just above the 366-day ceiling
-# the Sync Days setting allows, so the widest window anyone can sync is also
-# the widest they can look at.
-#
-# Deliberately set here rather than by changing the shared default, so the
-# pull request, incident and deployment endpoints keep the limit they were
-# written against. Raising theirs is a one-line change to
-# `interval_limit_in_days` in mhq/service/query_validator.py — not mine to
-# make on their behalf.
-TICKET_INTERVAL_LIMIT_DAYS = 400
-
 
 @app.route("/orgs/<org_id>/ticket_flow", methods={"GET"})
 @queryschema(
@@ -57,9 +44,7 @@ def get_ticket_flow_metrics(
 ):
     query_validator = get_query_validator()
     query_validator.org_validator(org_id)
-    interval = query_validator.interval_validator(
-        from_time, to_time, interval_limit_in_days=TICKET_INTERVAL_LIMIT_DAYS
-    )
+    interval = query_validator.interval_validator(from_time, to_time)
 
     metrics = get_ticket_analytics_service().get_flow_metrics(
         org_id=org_id,
