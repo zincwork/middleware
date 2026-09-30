@@ -33,6 +33,7 @@ def get_default_setting_data(setting_type: SettingType):
         return {
             "include_revert_prs": True,
             "filters": [],
+            "regression_label": "regression",
         }
 
     # ADD NEW DEFAULT SETTING HERE

@@ -4,11 +4,15 @@ import { GoLinkExternal } from 'react-icons/go';
 import { Line } from '@/components/Text';
 import { OPEN_IN_NEW_TAB_PROPS } from '@/utils/url';
 
-export const getDoraLink = (text: string) => (
+const FOUR_KEYS_URL = `https://cloud.google.com/blog/products/devops-sre/using-the-four-keys-to-measure-your-devops-performance#:~:text=Calculating%20the%20metrics`;
+
+/** `href` defaults to Google's Four Keys write-up; pass an in-app path to link
+ * to our own explanation instead (opens in place, no external-link icon). */
+export const getDoraLink = (text: string, href: string = FOUR_KEYS_URL) => (
   <Link
-    href={`https://cloud.google.com/blog/products/devops-sre/using-the-four-keys-to-measure-your-devops-performance#:~:text=Calculating%20the%20metrics`}
+    href={href}
     passHref
-    {...OPEN_IN_NEW_TAB_PROPS}
+    {...(href.startsWith('/') ? {} : OPEN_IN_NEW_TAB_PROPS)}
   >
     <Line
       tiny
@@ -24,7 +28,7 @@ export const getDoraLink = (text: string) => (
       medium
       white
     >
-      <span>{text}</span> <GoLinkExternal />
+      <span>{text}</span> {!href.startsWith('/') && <GoLinkExternal />}
     </Line>
   </Link>
 );

@@ -71,6 +71,7 @@ class SettingsService:
         return IncidentPRsSetting(
             include_revert_prs=data.get("include_revert_prs", True),
             filters=data.get("filters", []),
+            regression_label=data.get("regression_label") or "regression",
         )
 
     # ADD NEW DICT TO DATACLASS ADAPTERS HERE
@@ -196,6 +197,7 @@ class SettingsService:
         return IncidentPRsSetting(
             include_revert_prs=data.get("include_revert_prs", True),
             filters=data.get("filters", []),
+            regression_label=data.get("regression_label") or "regression",
         )
 
     # ADD NEW DICT TO API ADAPTERS HERE
@@ -267,6 +269,7 @@ class SettingsService:
         return {
             "include_revert_prs": specific_setting.include_revert_prs,
             "filters": specific_setting.filters,
+            "regression_label": specific_setting.regression_label,
         }
 
     # ADD NEW DATACLASS TO JSON DATA ADAPTERS HERE

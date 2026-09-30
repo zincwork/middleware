@@ -8,6 +8,7 @@ import { FlexBox } from '@/components/FlexBox';
 import { useOverlayPage } from '@/components/OverlayPageContext';
 import { Line } from '@/components/Text';
 import { track } from '@/constants/events';
+import { ROUTES } from '@/constants/routes';
 import {
   CardRoot,
   NoDataImg
@@ -134,8 +135,9 @@ export const ChangeFailureRateCard = () => {
               }}
             >
               <MetricExternalRead
-                link={`https://www.middlewarehq.com/blog/how-to-reduce-change-failure-rate-build-bulletproof-software-delivery-process`}
+                link={ROUTES.CHANGE_FAILURE_RATE_GUIDE.PATH}
                 label="Change Failure Rate"
+                linkText="How we calculate Change Failure Rate"
               />
             </FlexBox>
           </FlexBox>
@@ -145,7 +147,10 @@ export const ChangeFailureRateCard = () => {
                 <Line medium white>
                   {changeFailureRateProps.tooltip}
                 </Line>
-                {getDoraLink('How is this determined?')}
+                {getDoraLink(
+                  'How is this determined?',
+                  ROUTES.CHANGE_FAILURE_RATE_GUIDE.PATH
+                )}
               </FlexBox>
             }
             alignCenter

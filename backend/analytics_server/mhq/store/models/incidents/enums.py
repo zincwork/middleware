@@ -29,6 +29,10 @@ class IncidentStatus(Enum):
 class IncidentType(Enum):
     INCIDENT = "INCIDENT"
     REVERT_PR = "REVERT_PR"
+    # A Shortcut bug labelled as a regression: a change broke it (see regressions.py)
+    REGRESSION = "REGRESSION"
+    # A deploy that was undone by redeploying an older revision (see rollbacks.py)
+    ROLLBACK = "ROLLBACK"
     ALERT = "ALERT"
 
 

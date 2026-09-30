@@ -16,7 +16,7 @@ from mhq.exapi.schemas.timeline import (
     GitHubPullTimelineEvent,
     GitHubPrTimelineEventsDict,
 )
-from mhq.exapi.models.github import GitHubContributor
+from mhq.exapi.models.github import GitHubContributor, GithubCompareResult
 from mhq.exapi.models.github_timeline import GithubPullRequestTimelineEvents
 from mhq.store.models.code.enums import PullRequestEventType
 from mhq.utils.log import LOG
@@ -59,6 +59,44 @@ class GithubApiService:
         except GithubException as e:
             raise Exception(f"Error in PAT validation, Error: {e.data}")
         return response.status_code == 200
+
+    def compare_commits(
+        self, org_login: str, repo_name: str, base: str, head: str, max_pages: int = 10
+    ) -> GithubCompareResult:
+        """Commits in `head` that are not in `base` (GitHub's base...head compare).
+
+        Used to work out exactly which commits a deploy shipped. PyGithub 1.55
+        caps compare at 250 commits with no paging, so this calls the REST API
+        directly and pages through up to `max_pages` x 100 commits.
+        """
+        url = f"{self.base_url}/repos/{org_login}/{repo_name}/compare/{base}...{head}"
+        shas: List[str] = []
+        status, total = "unknown", 0
+        for page in range(1, max_pages + 1):
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params={"per_page": PAGE_SIZE, "page": page},
+                timeout=60,
+            )
+            if response.status_code == HTTPStatus.FORBIDDEN and (
+                response.headers.get("X-RateLimit-Remaining") == "0"
+            ):
+                raise GithubRateLimitExceeded("GitHub rate limit exceeded")
+            response.raise_for_status()
+            data = response.json()
+            status = data.get("status", status)
+            total = data.get("total_commits", total)
+            commits = data.get("commits") or []
+            shas.extend(commit["sha"] for commit in commits)
+            if len(shas) >= total or len(commits) < PAGE_SIZE:
+                break
+        return GithubCompareResult(
+            status=status,
+            commit_shas=shas,
+            total_commits=total,
+            truncated=len(shas) < total,
+        )
 
     def get_org_list(self) -> [GithubOrganization]:
         try:

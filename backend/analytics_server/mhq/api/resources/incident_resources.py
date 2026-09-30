@@ -7,6 +7,7 @@ from mhq.service.incidents.models.mean_time_to_recovery import (
     MeanTimeToRecoveryMetrics,
     ChangeFailureRateMetrics,
 )
+from mhq.service.incidents.regressions import RegressionAttribution
 from mhq.store.models.incidents import Incident
 
 
@@ -71,4 +72,39 @@ def adapt_change_failure_rate(change_failure_rate: ChangeFailureRateMetrics):
         "change_failure_rate": change_failure_rate.change_failure_rate,
         "failed_deployments": change_failure_rate.failed_deployments_count,
         "total_deployments": change_failure_rate.total_deployments_count,
+    }
+
+
+def _adapt_pr_ref(pr) -> dict:
+    if not pr:
+        return None
+    return {
+        "id": str(pr.id),
+        "number": pr.number,
+        "title": pr.title,
+        "url": pr.url,
+        "author": pr.author,
+        "state": pr.state.value if pr.state else None,
+        "merged_at": pr.state_changed_at.isoformat() if pr.state_changed_at else None,
+    }
+
+
+def adapt_regression_attribution(attribution: RegressionAttribution) -> dict:
+    ticket = attribution.ticket
+    return {
+        "ticket_key": ticket.key,
+        "title": ticket.title,
+        "url": ticket.url,
+        "labels": ticket.labels or [],
+        "created_at": (
+            ticket.provider_created_at.isoformat()
+            if ticket.provider_created_at
+            else None
+        ),
+        "completed_at": (
+            ticket.completed_at.isoformat() if ticket.completed_at else None
+        ),
+        "status": attribution.status,
+        "fix_pr": _adapt_pr_ref(attribution.fix_pr),
+        "culprit_pr": _adapt_pr_ref(attribution.culprit_pr),
     }
