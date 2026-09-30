@@ -44,22 +44,4 @@ def reset_bookmark(org_id: str, bookmark_timestamp: datetime = None):
 
     bookmark_service.reset_org_bookmarks(org_id, bookmark_timestamp)
 
-    # Tickets keep their own watermark table, so the shared bookmark
-    # service does not reach them. Rewinding it here means one call
-    # still rewinds everything, which is the point of this endpoint.
-    #
-    # Imported inside the function so a fault in the ticket layer
-    # cannot stop this blueprint loading and take the analytics
-    # server down with it. A fault at call time raises, which is
-    # correct: a reset that silently skipped tickets is what this
-    # change exists to prevent.
-    from mhq.service.tickets.bookmark import reset_org_ticket_bookmarks
-
-    ticket_providers_reset = reset_org_ticket_bookmarks(
-        org_id, bookmark_timestamp
-    )
-
-    return {
-        "updated_bookmark": bookmark_timestamp.isoformat(),
-        "ticket_providers_reset": ticket_providers_reset,
-    }
+    return {"updated_bookmark": bookmark_timestamp.isoformat()}

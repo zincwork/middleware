@@ -1,0 +1,224 @@
+"""
+Read-only audit of the merge-to-deploy ("Release" stage) cache.
+
+Why this exists
+----------------
+`mtd_handler.MergeToDeployCacheHandler` caches `PullRequest.merge_to_deploy`
+permanently: `CodeRepoService.get_prs_in_repo_merged_before_given_date_with_merge_to_deploy_as_null`
+only ever considers PRs where that column is still NULL. Once a PR is
+matched to a deployment — correctly or not — no later sync, incremental or
+full, ever looks at it again.
+
+That is fine so long as every real deployment is recorded before the PR
+matching runs. It is not fine when a real deployment is silently dropped —
+which is exactly what the CircleCI timestamp-parsing bug (fixed in
+mhq/exapi/circle_ci.py on 2026-09-29) did: a job whose started_at failed to
+parse was excluded from RepoWorkflowRuns entirely, so PRs that should have
+matched that deployment instead fell through to whatever deployment the
+matcher found next — however much later that was, since the matcher (see
+DeploymentPRMapperService.get_all_prs_deployed) has no distance or sanity
+bound on how far a match can be.
+
+Backfilling the missing CircleCI history repairs RepoWorkflowRuns going
+forward, but does nothing for PRs already (mis)matched. This module answers
+"which cached values disagree with what the matcher would produce today,
+now that the deployment data is more complete" — by replaying the exact same
+matching algorithm the real cache handler uses, from the start of each
+repo's history, without writing anything back.
+
+Read-only. Never calls CodeRepoService.update_prs or touches
+PullRequest.merge_to_deploy. Fixing a flagged PR (nulling the cached value
+so the real cache handler recomputes it on the next sync) is a deliberate,
+separate step — not this module's job.
+"""
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from sqlalchemy.orm import defer
+
+from mhq.service.deployments import DeploymentPRMapperService
+from mhq.store import db
+from mhq.store.models.code import (
+    OrgRepo,
+    PullRequest,
+    RepoWorkflow,
+    RepoWorkflowRuns,
+    RepoWorkflowRunsStatus,
+)
+from mhq.store.models.code.enums import PullRequestState
+
+
+@dataclass
+class MergeToDeployFinding:
+    pr_id: str
+    pr_number: str
+    pr_url: str
+    state_changed_at: datetime
+    cached_seconds: Optional[int]
+    recomputed_seconds: Optional[int]
+    recomputed_run_id: Optional[str]
+    recomputed_run_conducted_at: Optional[datetime]
+    status: str  # "mismatch" | "cached_value_has_no_replay_match"
+
+
+def replay_merge_to_deploy(
+    runs: List[RepoWorkflowRuns],
+    merged_prs: List[PullRequest],
+    deployment_pr_mapper_service: DeploymentPRMapperService,
+) -> List[MergeToDeployFinding]:
+    """The actual audit logic, kept free of any DB access so it can be
+    tested against plain fixture objects instead of a live database.
+
+    `runs` must be every SUCCESS RepoWorkflowRuns for one repo, ascending by
+    conducted_at. `merged_prs` must be every merged PullRequest for that
+    repo. Both need only the attributes DeploymentPRMapperService and this
+    function actually read (id, conducted_at, head_branch for runs; id,
+    number, url, state, base_branch, head_branch, state_changed_at,
+    merge_to_deploy for PRs) — plain namespaces work fine in tests.
+    """
+    # Every merged PR starts unmatched, regardless of what is currently
+    # cached on it — this is a full replay, not an incremental one.
+    unmatched: Dict[str, PullRequest] = {str(pr.id): pr for pr in merged_prs}
+    recomputed: Dict[str, Dict] = {}
+
+    for run in runs:
+        if not unmatched:
+            break
+        candidates = [
+            pr for pr in unmatched.values() if pr.state_changed_at <= run.conducted_at
+        ]
+        if not candidates:
+            continue
+        matched = deployment_pr_mapper_service.get_all_prs_deployed(candidates, run)
+        for pr in matched:
+            unmatched.pop(str(pr.id), None)
+            recomputed[str(pr.id)] = {
+                "seconds": int(
+                    (run.conducted_at - pr.state_changed_at).total_seconds()
+                ),
+                "run_id": str(run.id),
+                "run_conducted_at": run.conducted_at,
+            }
+
+    findings: List[MergeToDeployFinding] = []
+    for pr in merged_prs:
+        cached = pr.merge_to_deploy
+        entry = recomputed.get(str(pr.id))
+
+        if entry is None:
+            if cached is not None:
+                # The replay found no deployment this PR reaches at all, yet
+                # it carries a cached value — the underlying deploy data is
+                # still incomplete for this one. A backfill, not a
+                # null-and-recompute, is what closes this gap.
+                findings.append(
+                    MergeToDeployFinding(
+                        pr_id=str(pr.id),
+                        pr_number=pr.number,
+                        pr_url=pr.url,
+                        state_changed_at=pr.state_changed_at,
+                        cached_seconds=cached,
+                        recomputed_seconds=None,
+                        recomputed_run_id=None,
+                        recomputed_run_conducted_at=None,
+                        status="cached_value_has_no_replay_match",
+                    )
+                )
+            continue
+
+        if cached is None:
+            # Not yet cached at all — the real cache handler's own next sync
+            # will pick this one up normally. Nothing here is wrong; flagging
+            # it would just be noise on every still-pending PR.
+            continue
+
+        if cached != entry["seconds"]:
+            findings.append(
+                MergeToDeployFinding(
+                    pr_id=str(pr.id),
+                    pr_number=pr.number,
+                    pr_url=pr.url,
+                    state_changed_at=pr.state_changed_at,
+                    cached_seconds=cached,
+                    recomputed_seconds=entry["seconds"],
+                    recomputed_run_id=entry["run_id"],
+                    recomputed_run_conducted_at=entry["run_conducted_at"],
+                    status="mismatch",
+                )
+            )
+
+    return findings
+
+
+class MergeToDeployAuditService:
+    def __init__(self):
+        self.deployment_pr_mapper_service = DeploymentPRMapperService()
+
+    def audit_org(self, org_id: str, repo_ids: Optional[List[str]] = None):
+        repos = self._get_org_repos(org_id, repo_ids)
+        findings_by_repo: Dict[str, List[MergeToDeployFinding]] = {}
+        for repo in repos:
+            findings = self.audit_repo(str(repo.id))
+            if findings:
+                findings_by_repo[str(repo.id)] = findings
+        return repos, findings_by_repo
+
+    def audit_repo(self, repo_id: str) -> List[MergeToDeployFinding]:
+        runs = self._get_all_successful_runs(repo_id)
+        merged_prs = self._get_all_merged_prs(repo_id)
+        if not merged_prs:
+            return []
+        return replay_merge_to_deploy(
+            runs, merged_prs, self.deployment_pr_mapper_service
+        )
+
+    # ------------------------------------------------------------------
+    # Queries. Written directly against the models rather than reusing
+    # CodeRepoService/WorkflowRepoService, because every existing method
+    # there is scoped to "since a bookmark" or "still NULL" — this audit
+    # needs the unfiltered, full-history version of both, which does not
+    # exist yet and is not otherwise useful outside an audit like this one.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_org_repos(org_id: str, repo_ids: Optional[List[str]]) -> List[OrgRepo]:
+        query = db.session.query(OrgRepo).filter(
+            OrgRepo.org_id == org_id, OrgRepo.is_active.is_(True)
+        )
+        if repo_ids:
+            query = query.filter(OrgRepo.id.in_(repo_ids))
+        return query.all()
+
+    @staticmethod
+    def _get_all_successful_runs(repo_id: str) -> List[RepoWorkflowRuns]:
+        return (
+            db.session.query(RepoWorkflowRuns)
+            .options(defer(RepoWorkflowRuns.meta))
+            .join(RepoWorkflow, RepoWorkflow.id == RepoWorkflowRuns.repo_workflow_id)
+            .filter(
+                RepoWorkflow.org_repo_id == repo_id,
+                RepoWorkflow.is_active.is_(True),
+                RepoWorkflowRuns.status == RepoWorkflowRunsStatus.SUCCESS,
+            )
+            .order_by(RepoWorkflowRuns.conducted_at)
+            .all()
+        )
+
+    @staticmethod
+    def _get_all_merged_prs(repo_id: str) -> List[PullRequest]:
+        return (
+            db.session.query(PullRequest)
+            .options(defer(PullRequest.data), defer(PullRequest.meta))
+            .filter(
+                PullRequest.repo_id == repo_id,
+                PullRequest.state == PullRequestState.MERGED,
+            )
+            .order_by(PullRequest.state_changed_at)
+            .all()
+        )
+
+
+def get_merge_to_deploy_audit_service() -> MergeToDeployAuditService:
+    return MergeToDeployAuditService()

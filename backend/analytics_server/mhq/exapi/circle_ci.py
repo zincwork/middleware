@@ -40,8 +40,29 @@ RETRY_BACKOFF_SECONDS = 5
 # through the project's entire history.
 MAX_PIPELINE_PAGES = 50
 
+<<<<<<< HEAD
 # The fractional-seconds part of an ISO timestamp, e.g. ".45" in "15.45+00:00"
 _FRACTIONAL_SECONDS = re.compile(r"\.(\d+)(?=[+-]\d{2}:\d{2}$|$)")
+=======
+# CircleCI's backend is Go, whose RFC3339Nano formatter trims trailing zeros
+# from fractional seconds ("2026-09-10T13:42:10.38Z" for what is really
+# .380000). Python's datetime.fromisoformat only accepts exactly 3 or 6
+# fractional digits before 3.11 (this repo runs 3.9), so anything else raised
+# ValueError and the timestamp was silently dropped — which in turn dropped
+# the whole deployment run, since a missing started_at reads as "never ran".
+# Padding to 6 digits with zeros is exact: a decimal fraction of a second
+# means the same thing regardless of how many trailing zeros are written.
+_FRACTIONAL_SECONDS_RE = re.compile(r"\.(\d+)")
+
+
+def _pad_fractional_seconds(value: str) -> str:
+    match = _FRACTIONAL_SECONDS_RE.search(value)
+    if not match:
+        return value
+    digits = match.group(1)[:6].ljust(6, "0")
+    start, end = match.span()
+    return value[:start] + "." + digits + value[end:]
+>>>>>>> dacfd3e (Improved sync to take in more data.)
 
 
 def parse_circle_ci_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -57,9 +78,13 @@ def parse_circle_ci_datetime(value: Optional[str]) -> Optional[datetime]:
     """
     if not value:
         return None
+<<<<<<< HEAD
     normalised = _FRACTIONAL_SECONDS.sub(
         lambda m: "." + m.group(1)[:6].ljust(6, "0"), value.replace("Z", "+00:00")
     )
+=======
+    normalised = _pad_fractional_seconds(value.replace("Z", "+00:00"))
+>>>>>>> dacfd3e (Improved sync to take in more data.)
     try:
         return datetime.fromisoformat(normalised)
     except ValueError:

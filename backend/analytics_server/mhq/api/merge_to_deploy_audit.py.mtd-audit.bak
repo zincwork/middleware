@@ -1,0 +1,75 @@
+"""
+Read-only audit of the merge-to-deploy ("Release" stage) cache.
+
+Registered as its own blueprint so the only change to an existing file is two
+lines in app.py, matching the pattern used for the tickets blueprint.
+
+See mhq/service/merge_to_deploy_broker/mtd_audit.py for why this exists and
+exactly what it checks. In one line: merge_to_deploy is a permanent,
+NULL-gated cache, so a PR matched to the wrong (too-distant) deployment
+before a data gap was backfilled stays wrong forever unless something
+re-checks it — this replays the real matching algorithm against the current,
+hopefully-more-complete deployment history and reports any disagreement.
+This route never writes to PullRequest.merge_to_deploy or anything else.
+"""
+
+from flask import Blueprint
+from voluptuous import All, Coerce, Optional, Schema
+
+from mhq.api.request_utils import queryschema
+from mhq.service.merge_to_deploy_broker.mtd_audit import (
+    get_merge_to_deploy_audit_service,
+)
+from mhq.service.query_validator import get_query_validator
+
+app = Blueprint("merge_to_deploy_audit", __name__)
+
+
+def _split_csv(value: str):
+    return [v for v in (value or "").split(",") if v]
+
+
+@app.route("/orgs/<org_id>/merge_to_deploy_audit", methods={"GET"})
+@queryschema(
+    Schema(
+        {
+            Optional("repo_ids"): All(str, Coerce(_split_csv)),
+        }
+    ),
+)
+def get_merge_to_deploy_audit(org_id: str, repo_ids: list = None):
+    query_validator = get_query_validator()
+    query_validator.org_validator(org_id)
+
+    audit_service = get_merge_to_deploy_audit_service()
+    repos, findings_by_repo = audit_service.audit_org(org_id, repo_ids)
+
+    repos_by_id = {str(r.id): r for r in repos}
+    total_findings = sum(len(v) for v in findings_by_repo.values())
+
+    return {
+        "org_id": org_id,
+        "repos_checked": len(repos),
+        "repos_with_findings": len(findings_by_repo),
+        "total_findings": total_findings,
+        "findings": {
+            repos_by_id[repo_id].name: [
+                {
+                    "pr_number": f.pr_number,
+                    "pr_url": f.pr_url,
+                    "state_changed_at": f.state_changed_at.isoformat(),
+                    "cached_seconds": f.cached_seconds,
+                    "recomputed_seconds": f.recomputed_seconds,
+                    "recomputed_run_id": f.recomputed_run_id,
+                    "recomputed_run_conducted_at": (
+                        f.recomputed_run_conducted_at.isoformat()
+                        if f.recomputed_run_conducted_at
+                        else None
+                    ),
+                    "status": f.status,
+                }
+                for f in findings
+            ]
+            for repo_id, findings in findings_by_repo.items()
+        },
+    }

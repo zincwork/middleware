@@ -68,6 +68,47 @@ You get a table like this, and then a verdict:
 | All Zinc  |    14 | 132 |          38.4 |      61 | 2.03 |   4.9 |         3 |      6.2 |
 | Skipper   |     3 |  41 |          52.1 |      18 | 0.60 |   5.6 |         1 |      9.0 |
 
+### Checking the Release numbers are right
+"Release" (merge-to-deploy) is cached permanently on each PR the first time
+it's matched to a deployment — once set, no later sync ever revisits it. A
+real incident showed why that matters: a CircleCI timestamp-parsing bug
+(fixed 2026-09-29, see `mhq/exapi/circle_ci.py`) silently dropped some real
+deployments before they were recorded, so PRs merged around those gaps got
+cached against whatever deployment came next instead — in one case
+(zincwork/mvp-api#6679) 4 weeks 5 days later than the deploy that actually
+shipped it, because the matcher has no distance bound at all. Backfilling
+the missing deploy history fixes that going forward but does nothing for a
+PR already cached wrong.
+
+```
+python3 scripts/zinc/audit_merge_to_deploy.py --dry-run
+python3 scripts/zinc/audit_merge_to_deploy.py
+```
+
+Read-only — it replays the real matching algorithm against current deploy
+history and reports any PR whose cached Release time disagrees, it never
+writes anything. Two kinds of finding: `mismatch` (a nearer deploy now
+exists) and `cached_value_has_no_replay_match` (the real deploy still
+hasn't been recovered — widen the sync window first, same mechanism as
+`backfill_tickets.py`, then re-run). Worth running after any large CircleCI
+backfill, or if a Release number looks implausible.
+
+To correct what it finds:
+
+```
+python3 scripts/zinc/fix_merge_to_deploy.py            # dry run by default
+python3 scripts/zinc/fix_merge_to_deploy.py --apply
+```
+
+`mismatch` PRs are written with the replay's own recomputed value directly —
+the same matcher the real cache handler uses, already computed once by the
+audit, not a second calculation that could disagree with it — persisted
+through the identical `CodeRepoService.update_prs` method the real handler
+itself calls. `cached_value_has_no_replay_match` PRs are set to NULL rather
+than left wrong, which also makes them eligible for the real handler to pick
+up on its own once the missing deploy is backfilled. Always dry-run first;
+`--apply` is the only thing that writes.
+
 ## Shortcut and the Cockpit view
 Ticket flow metrics (cycle time, throughput, bug ratio, WIP, epics) live on the
 **Cockpit** page, off the main menu next to DORA Metrics. It reads from
